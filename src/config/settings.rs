@@ -1,6 +1,34 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+const DEFAULT_CONFIG: &str = r##"# ─── kilo configuration ───────────────────────────────────────
+# location: ~/.config/kilo/kilo.conf.toml
+# open this file in kilo with ctrl+,
+
+# ─── editing ──────────────────────────────────────────────────
+
+# number of spaces per indent level
+# indent_size = 4
+
+# use spaces instead of tabs
+# use_spaces = true
+
+# ─── autosave ─────────────────────────────────────────────────
+
+# delay in ms after last edit before autosaving (0 to disable)
+# autosave_delay_ms = 500
+
+# ─── appearance ───────────────────────────────────────────────
+
+# horizontal padding (chars) between gutter and text / text and edge
+# horizontal_padding = 4
+
+# color theme — bundled: kilo-dark, kilo-light, catppuccin,
+#   dracula, gruvbox, nord, rose-pine, solarized-dark
+# custom: drop a .toml in ~/.config/kilo/themes/
+# theme = "kilo-dark"
+"##;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_indent_size")]
@@ -18,7 +46,7 @@ pub struct Settings {
 fn default_indent_size() -> usize { 4 }
 fn default_use_spaces() -> bool { true }
 fn default_autosave_delay_ms() -> u64 { 500 }
-fn default_horizontal_padding() -> usize { 0 }
+fn default_horizontal_padding() -> usize { 4 }
 fn default_theme() -> String { "kilo-dark".to_string() }
 
 impl Default for Settings {
@@ -70,8 +98,7 @@ impl Settings {
             let _ = std::fs::create_dir_all(parent);
         }
         if !path.exists() {
-            let content = toml::to_string_pretty(self).unwrap_or_default();
-            let _ = std::fs::write(&path, content);
+            let _ = std::fs::write(&path, DEFAULT_CONFIG);
             tracing::info!("created default config at {}", path.display());
         }
     }

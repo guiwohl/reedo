@@ -156,6 +156,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.theme_switcher_state.reset();
             app.popup = crate::app::Popup::ThemeSwitcher;
         }
+        KeyCode::Char(']') if ctrl => {
+            app.padding_input = app.horizontal_padding.to_string();
+            app.popup = crate::app::Popup::PaddingInput;
+        }
+        KeyCode::Char('\x1d') => {
+            app.padding_input = app.horizontal_padding.to_string();
+            app.popup = crate::app::Popup::PaddingInput;
+        }
         // keybind help — multiple bindings to cover terminal differences
         KeyCode::Char('/') if ctrl => {
             app.keybind_help_state.reset();

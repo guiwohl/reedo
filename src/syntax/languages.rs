@@ -75,6 +75,48 @@ pub fn all_languages() -> Vec<LangConfig> {
             highlight_query: MD_HIGHLIGHTS,
             extensions: &["md", "markdown"],
         },
+        LangConfig {
+            name: "go",
+            language: tree_sitter_go::LANGUAGE.into(),
+            highlight_query: GO_HIGHLIGHTS,
+            extensions: &["go"],
+        },
+        LangConfig {
+            name: "toml",
+            language: tree_sitter_toml_ng::language(),
+            highlight_query: TOML_HIGHLIGHTS,
+            extensions: &["toml"],
+        },
+        LangConfig {
+            name: "yaml",
+            language: tree_sitter_yaml::LANGUAGE.into(),
+            highlight_query: YAML_HIGHLIGHTS,
+            extensions: &["yaml", "yml"],
+        },
+        LangConfig {
+            name: "lua",
+            language: tree_sitter_lua::LANGUAGE.into(),
+            highlight_query: LUA_HIGHLIGHTS,
+            extensions: &["lua"],
+        },
+        LangConfig {
+            name: "ruby",
+            language: tree_sitter_ruby::LANGUAGE.into(),
+            highlight_query: RUBY_HIGHLIGHTS,
+            extensions: &["rb", "rake", "gemspec"],
+        },
+        LangConfig {
+            name: "zig",
+            language: tree_sitter_zig::LANGUAGE.into(),
+            highlight_query: ZIG_HIGHLIGHTS,
+            extensions: &["zig"],
+        },
+        LangConfig {
+            name: "makefile",
+            language: tree_sitter_make::LANGUAGE.into(),
+            highlight_query: MAKE_HIGHLIGHTS,
+            extensions: &["mk"],
+        },
     ]
 }
 
@@ -237,4 +279,101 @@ const MD_HIGHLIGHTS: &str = r##"
 (code_span) @string
 (fenced_code_block) @string
 (block_quote) @comment
+"##;
+
+const GO_HIGHLIGHTS: &str = r##"
+(comment) @comment
+(interpreted_string_literal) @string
+(raw_string_literal) @string
+(rune_literal) @string
+(int_literal) @number
+(float_literal) @number
+(true) @constant
+(false) @constant
+(nil) @constant
+(type_identifier) @type
+(function_declaration name: (identifier) @function)
+(call_expression function: (identifier) @function)
+(method_declaration name: (field_identifier) @function)
+(field_identifier) @property
+(package_identifier) @keyword
+(identifier) @variable
+"##;
+
+const TOML_HIGHLIGHTS: &str = r##"
+(comment) @comment
+(string) @string
+(integer) @number
+(float) @number
+(boolean) @constant
+(bare_key) @property
+(quoted_key) @property
+(table_array_element) @keyword
+(table) @keyword
+"##;
+
+const YAML_HIGHLIGHTS: &str = r##"
+(comment) @comment
+(string_scalar) @string
+(double_quote_scalar) @string
+(single_quote_scalar) @string
+(block_scalar) @string
+(integer_scalar) @number
+(float_scalar) @number
+(boolean_scalar) @constant
+(null_scalar) @constant
+(anchor_name) @property
+(alias_name) @property
+(tag) @keyword
+"##;
+
+const LUA_HIGHLIGHTS: &str = r##"
+(comment) @comment
+(string) @string
+(number) @number
+(true) @constant
+(false) @constant
+(nil) @constant
+(function_declaration name: (identifier) @function)
+(function_call name: (identifier) @function)
+(field_expression field: (identifier) @property)
+(identifier) @variable
+"##;
+
+const RUBY_HIGHLIGHTS: &str = r##"
+(comment) @comment
+(string) @string
+(integer) @number
+(float) @number
+(true) @constant
+(false) @constant
+(nil) @constant
+(method name: (identifier) @function)
+(call method: (identifier) @function)
+(class name: (constant) @type)
+(module name: (constant) @type)
+(symbol) @string
+(constant) @type
+(identifier) @variable
+"##;
+
+const ZIG_HIGHLIGHTS: &str = r##"
+(line_comment) @comment
+(container_doc_comment) @comment
+(doc_comment) @comment
+(STRINGLITERALSINGLE) @string
+(CHAR_LITERAL) @string
+(INTEGER) @number
+(FLOAT) @number
+(BuildinTypeExpr) @type
+(IDENTIFIER) @variable
+"##;
+
+
+const MAKE_HIGHLIGHTS: &str = r##"
+(comment) @comment
+(rule (targets) @function)
+(variable_assignment name: (word) @property)
+(variable_reference) @property
+(shell_text) @string
 "##;

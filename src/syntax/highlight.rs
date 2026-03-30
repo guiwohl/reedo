@@ -66,10 +66,21 @@ fn capture_name_to_style(name: &str, tc: &crate::config::theme::ThemeColors) -> 
 
 impl Highlighter {
     pub fn detect_language(file_path: &Path) -> Option<LangConfig> {
+        let filename = file_path.file_name()?.to_str()?;
+        let langs = languages::all_languages();
+
+        // match by filename first (Dockerfile, Makefile, etc)
+        let name_match = match filename {
+            "Makefile" | "makefile" | "GNUmakefile" => Some("makefile"),
+            _ => None,
+        };
+        if let Some(lang_name) = name_match {
+            return langs.into_iter().find(|l| l.name == lang_name);
+        }
+
+        // then by extension
         let ext = file_path.extension()?.to_str()?;
-        languages::all_languages()
-            .into_iter()
-            .find(|l| l.extensions.contains(&ext))
+        langs.into_iter().find(|l| l.extensions.contains(&ext))
     }
 
     pub fn set_language(&mut self, config: &LangConfig, theme_colors: &crate::config::theme::ThemeColors) {

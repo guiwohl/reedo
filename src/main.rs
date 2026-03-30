@@ -139,6 +139,11 @@ fn event_loop(
                         Constraint::Length(2), // replace bar (2 lines)
                         Constraint::Length(1),
                     ],
+                    Popup::PaddingInput => vec![
+                        Constraint::Min(1),
+                        Constraint::Length(1), // padding input bar
+                        Constraint::Length(1), // status bar
+                    ],
                     _ => vec![
                         Constraint::Min(1),
                         Constraint::Length(1),
@@ -160,6 +165,19 @@ fn event_loop(
                 }
                 Popup::Replace => {
                     frame.render_widget(ReplaceBar { state: &app.replace_state }, main_chunks[1]);
+                    frame.render_widget(StatusBar { app }, main_chunks[2]);
+                }
+                Popup::PaddingInput => {
+                    // render a simple input bar
+                    let bar_area = main_chunks[1];
+                    let bg = ratatui::style::Color::Rgb(30, 30, 46);
+                    let fg = ratatui::style::Color::Rgb(192, 202, 245);
+                    frame.render_widget(
+                        ratatui::widgets::Paragraph::new(
+                            format!(" Horizontal padding: {}█", app.padding_input)
+                        ).style(ratatui::style::Style::default().fg(fg).bg(bg)),
+                        bar_area,
+                    );
                     frame.render_widget(StatusBar { app }, main_chunks[2]);
                 }
                 _ => {
@@ -267,6 +285,7 @@ fn event_loop(
         }
 
         app.check_autosave();
+        app.check_git_refresh();
 
         if !app.running {
             break;
@@ -668,6 +687,27 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                 }
                 KeyCode::Up => app.keybind_help_state.scroll_up(),
                 KeyCode::Down => app.keybind_help_state.scroll_down(max_scroll),
+                _ => {}
+            }
+        }
+
+        Popup::PaddingInput => {
+            match key.code {
+                KeyCode::Esc => {
+                    app.popup = Popup::None;
+                }
+                KeyCode::Enter => {
+                    if let Ok(val) = app.padding_input.parse::<usize>() {
+                        app.horizontal_padding = val;
+                    }
+                    app.popup = Popup::None;
+                }
+                KeyCode::Backspace => {
+                    app.padding_input.pop();
+                }
+                KeyCode::Char(ch) if ch.is_ascii_digit() => {
+                    app.padding_input.push(ch);
+                }
                 _ => {}
             }
         }

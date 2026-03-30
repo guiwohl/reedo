@@ -29,6 +29,7 @@ pub enum Popup {
     FuzzyFinder,
     ThemeSwitcher,
     KeybindHelp,
+    PaddingInput,
 }
 
 pub struct App {
@@ -58,9 +59,11 @@ pub struct App {
     pub project_replace_state: ProjectReplaceState,
     pub theme_switcher_state: ThemeSwitcherState,
     pub keybind_help_state: KeybindHelpState,
+    pub padding_input: String,
     pub project_root: Option<PathBuf>,
     pub git_info: Option<GitInfo>,
     pub gutter_marks: HashMap<usize, GutterMark>,
+    pub last_git_refresh: Instant,
 }
 
 impl App {
@@ -93,9 +96,11 @@ impl App {
             project_replace_state: ProjectReplaceState::default(),
             theme_switcher_state: ThemeSwitcherState::default(),
             keybind_help_state: KeybindHelpState::default(),
+            padding_input: String::new(),
             project_root: None,
             git_info: None,
             gutter_marks: HashMap::new(),
+            last_git_refresh: Instant::now(),
         }
     }
 
@@ -155,6 +160,18 @@ impl App {
                 }
                 self.last_edit_time = None;
             }
+        }
+    }
+
+    pub fn check_git_refresh(&mut self) {
+        if self.last_git_refresh.elapsed().as_secs() >= 5 {
+            if let Some(root) = &self.project_root {
+                self.git_info = GitInfo::gather(root);
+                if let Some(ref file_path) = self.buffer.file_path {
+                    self.gutter_marks = GitInfo::diff_for_file(root, file_path);
+                }
+            }
+            self.last_git_refresh = Instant::now();
         }
     }
 
