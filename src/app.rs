@@ -1,0 +1,171 @@
+use std::path::PathBuf;
+use std::time::Instant;
+
+use crate::config::settings::Settings;
+use crate::editor::buffer::Buffer;
+use crate::editor::cursor::Cursor;
+use crate::editor::mode::Mode;
+use crate::git::status::GitInfo;
+use crate::syntax::highlight::Highlighter;
+use crate::ui::tree::TreeState;
+use crate::ui::search::SearchState;
+use crate::ui::replace::ReplaceState;
+use crate::ui::fuzzy::FuzzyState;
+use crate::ui::search_project::ProjectSearchState;
+use crate::ui::replace_project::ProjectReplaceState;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Popup {
+    None,
+    FileTree,
+    Search,
+    SearchProject,
+    Replace,
+    ReplaceProject,
+    FuzzyFinder,
+}
+
+pub struct App {
+    pub buffer: Buffer,
+    pub cursor: Cursor,
+    pub mode: Mode,
+    pub highlighter: Highlighter,
+    pub needs_reparse: bool,
+    pub running: bool,
+    pub viewport_top: usize,
+    pub viewport_left: usize,
+    pub viewport_height: usize,
+    pub viewport_width: usize,
+    pub horizontal_padding: usize,
+    pub indent_size: usize,
+    pub yank_buffer: Option<String>,
+    pub last_edit_time: Option<Instant>,
+    pub autosave_delay_ms: u64,
+    pub settings: Settings,
+    pub pending_key: Option<char>,
+    pub popup: Popup,
+    pub tree_state: TreeState,
+    pub search_state: SearchState,
+    pub replace_state: ReplaceState,
+    pub fuzzy_state: FuzzyState,
+    pub project_search_state: ProjectSearchState,
+    pub project_replace_state: ProjectReplaceState,
+    pub project_root: Option<PathBuf>,
+    pub git_info: Option<GitInfo>,
+}
+
+impl App {
+    pub fn new(settings: Settings) -> Self {
+        Self {
+            buffer: Buffer::default(),
+            cursor: Cursor::default(),
+            mode: Mode::default(),
+            highlighter: Highlighter::default(),
+            needs_reparse: false,
+            running: true,
+            viewport_top: 0,
+            viewport_left: 0,
+            viewport_height: 24,
+            viewport_width: 80,
+            horizontal_padding: settings.horizontal_padding,
+            indent_size: settings.indent_size,
+            autosave_delay_ms: settings.autosave_delay_ms,
+            yank_buffer: None,
+            last_edit_time: None,
+            settings,
+            pending_key: None,
+            popup: Popup::None,
+            tree_state: TreeState::default(),
+            search_state: SearchState::default(),
+            replace_state: ReplaceState::default(),
+            fuzzy_state: FuzzyState::default(),
+            project_search_state: ProjectSearchState::default(),
+            project_replace_state: ProjectReplaceState::default(),
+            project_root: None,
+            git_info: None,
+        }
+    }
+
+    pub fn set_project_root(&mut self, path: PathBuf) {
+        self.git_info = GitInfo::gather(&path);
+        self.project_root = Some(path);
+    }
+
+    pub fn refresh_git(&mut self) {
+        if let Some(root) = &self.project_root {
+            self.git_info = GitInfo::gather(root);
+        }
+    }
+
+    pub fn open_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
+        self.buffer = Buffer::from_file(path)?;
+        self.cursor = Cursor::default();
+        self.viewport_top = 0;
+        self.viewport_left = 0;
+
+        // detect and setup syntax highlighting
+        if let Some(config) = Highlighter::detect_language(path) {
+            self.highlighter.set_language(&config);
+            let source = self.buffer.rope.to_string();
+            self.highlighter.parse(&source);
+            self.highlighter.compute_styles(&source);
+        } else if crate::syntax::highlight::is_env_file(path) {
+            // .env files use simple highlighting, no tree-sitter
+            tracing::info!("detected .env file");
+        }
+
+        tracing::info!("opened file: {}", path.display());
+        Ok(())
+    }
+
+    pub fn mark_edited(&mut self) {
+        self.last_edit_time = Some(Instant::now());
+        self.needs_reparse = true;
+    }
+
+    pub fn reparse_if_needed(&mut self) {
+        if self.needs_reparse && self.highlighter.is_active() {
+            let source = self.buffer.rope.to_string();
+            self.highlighter.parse(&source);
+            self.highlighter.compute_styles(&source);
+            self.needs_reparse = false;
+        }
+    }
+
+    pub fn check_autosave(&mut self) {
+        if let Some(last_edit) = self.last_edit_time {
+            if last_edit.elapsed().as_millis() >= self.autosave_delay_ms as u128
+                && self.buffer.dirty
+                && self.buffer.file_path.is_some()
+            {
+                if let Err(e) = self.buffer.save() {
+                    tracing::error!("autosave failed: {}", e);
+                }
+                self.last_edit_time = None;
+            }
+        }
+    }
+
+    pub fn scroll_to_cursor(&mut self) {
+        // vertical scroll
+        if self.cursor.pos.line < self.viewport_top {
+            self.viewport_top = self.cursor.pos.line;
+        }
+        let bottom = self.viewport_top + self.viewport_height.saturating_sub(2); // -2 for statusbar
+        if self.cursor.pos.line >= bottom {
+            self.viewport_top = self.cursor.pos.line - self.viewport_height.saturating_sub(3);
+        }
+
+        // horizontal scroll
+        let gutter_width = format!("{}", self.buffer.line_count()).len().max(3) + 1;
+        let text_width = self
+            .viewport_width
+            .saturating_sub(gutter_width + self.horizontal_padding * 2);
+        if self.cursor.pos.col < self.viewport_left {
+            self.viewport_left = self.cursor.pos.col;
+        }
+        if self.cursor.pos.col >= self.viewport_left + text_width {
+            self.viewport_left = self.cursor.pos.col - text_width + 1;
+        }
+    }
+}
