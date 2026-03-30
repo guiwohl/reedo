@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
+use std::collections::HashMap;
 use crate::config::settings::Settings;
+use crate::config::theme::{self, Theme};
 use crate::editor::buffer::Buffer;
 use crate::editor::cursor::Cursor;
 use crate::editor::mode::Mode;
-use crate::git::status::GitInfo;
+use crate::git::status::{GitInfo, GutterMark};
 use crate::syntax::highlight::Highlighter;
 use crate::ui::tree::TreeState;
 use crate::ui::search::SearchState;
@@ -13,6 +15,8 @@ use crate::ui::replace::ReplaceState;
 use crate::ui::fuzzy::FuzzyState;
 use crate::ui::search_project::ProjectSearchState;
 use crate::ui::replace_project::ProjectReplaceState;
+use crate::ui::theme_switcher::ThemeSwitcherState;
+use crate::ui::keybind_help::KeybindHelpState;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Popup {
@@ -23,6 +27,8 @@ pub enum Popup {
     Replace,
     ReplaceProject,
     FuzzyFinder,
+    ThemeSwitcher,
+    KeybindHelp,
 }
 
 pub struct App {
@@ -41,7 +47,7 @@ pub struct App {
     pub yank_buffer: Option<String>,
     pub last_edit_time: Option<Instant>,
     pub autosave_delay_ms: u64,
-    pub settings: Settings,
+    pub theme: Theme,
     pub pending_key: Option<char>,
     pub popup: Popup,
     pub tree_state: TreeState,
@@ -50,12 +56,16 @@ pub struct App {
     pub fuzzy_state: FuzzyState,
     pub project_search_state: ProjectSearchState,
     pub project_replace_state: ProjectReplaceState,
+    pub theme_switcher_state: ThemeSwitcherState,
+    pub keybind_help_state: KeybindHelpState,
     pub project_root: Option<PathBuf>,
     pub git_info: Option<GitInfo>,
+    pub gutter_marks: HashMap<usize, GutterMark>,
 }
 
 impl App {
     pub fn new(settings: Settings) -> Self {
+        let loaded_theme = theme::load_theme(&settings.theme);
         Self {
             buffer: Buffer::default(),
             cursor: Cursor::default(),
@@ -72,7 +82,7 @@ impl App {
             autosave_delay_ms: settings.autosave_delay_ms,
             yank_buffer: None,
             last_edit_time: None,
-            settings,
+            theme: loaded_theme,
             pending_key: None,
             popup: Popup::None,
             tree_state: TreeState::default(),
@@ -81,20 +91,17 @@ impl App {
             fuzzy_state: FuzzyState::default(),
             project_search_state: ProjectSearchState::default(),
             project_replace_state: ProjectReplaceState::default(),
+            theme_switcher_state: ThemeSwitcherState::default(),
+            keybind_help_state: KeybindHelpState::default(),
             project_root: None,
             git_info: None,
+            gutter_marks: HashMap::new(),
         }
     }
 
     pub fn set_project_root(&mut self, path: PathBuf) {
         self.git_info = GitInfo::gather(&path);
         self.project_root = Some(path);
-    }
-
-    pub fn refresh_git(&mut self) {
-        if let Some(root) = &self.project_root {
-            self.git_info = GitInfo::gather(root);
-        }
     }
 
     pub fn open_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
@@ -105,13 +112,18 @@ impl App {
 
         // detect and setup syntax highlighting
         if let Some(config) = Highlighter::detect_language(path) {
-            self.highlighter.set_language(&config);
+            self.highlighter.set_language(&config, &self.theme.colors);
             let source = self.buffer.rope.to_string();
             self.highlighter.parse(&source);
             self.highlighter.compute_styles(&source);
         } else if crate::syntax::highlight::is_env_file(path) {
             // .env files use simple highlighting, no tree-sitter
             tracing::info!("detected .env file");
+        }
+
+        // compute git gutter marks
+        if let Some(ref root) = self.project_root {
+            self.gutter_marks = GitInfo::diff_for_file(root, path);
         }
 
         tracing::info!("opened file: {}", path.display());

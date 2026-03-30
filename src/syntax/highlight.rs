@@ -46,20 +46,21 @@ impl Default for Highlighter {
     }
 }
 
-// default dark minimal palette (Tokyo Night inspired)
-fn capture_name_to_style(name: &str) -> HighlightStyle {
+fn capture_name_to_style(name: &str, tc: &crate::config::theme::ThemeColors) -> HighlightStyle {
+    use crate::config::theme::parse_hex_color;
     match name {
-        "keyword" => HighlightStyle { fg: Color::Rgb(187, 154, 247), bold: true },  // purple
-        "string" => HighlightStyle { fg: Color::Rgb(158, 206, 106), bold: false },   // green
-        "number" | "constant" => HighlightStyle { fg: Color::Rgb(255, 158, 100), bold: false }, // orange
-        "comment" => HighlightStyle { fg: Color::Rgb(86, 95, 137), bold: false },    // dim gray
-        "function" | "function.macro" => HighlightStyle { fg: Color::Rgb(125, 174, 247), bold: false }, // blue
-        "type" => HighlightStyle { fg: Color::Rgb(42, 195, 222), bold: false },      // cyan
-        "property" => HighlightStyle { fg: Color::Rgb(115, 186, 194), bold: false }, // teal
-        "operator" => HighlightStyle { fg: Color::Rgb(137, 221, 255), bold: false }, // light blue
-        "attribute" => HighlightStyle { fg: Color::Rgb(224, 175, 104), bold: false },// yellow
-        "variable.builtin" => HighlightStyle { fg: Color::Rgb(247, 118, 142), bold: false }, // red
-        _ => HighlightStyle { fg: Color::Rgb(192, 202, 245), bold: false },          // default text
+        "keyword" => HighlightStyle { fg: parse_hex_color(&tc.keyword), bold: true },
+        "string" => HighlightStyle { fg: parse_hex_color(&tc.string), bold: false },
+        "number" | "constant" => HighlightStyle { fg: parse_hex_color(&tc.number), bold: false },
+        "comment" => HighlightStyle { fg: parse_hex_color(&tc.comment), bold: false },
+        "function" | "function.macro" => HighlightStyle { fg: parse_hex_color(&tc.function), bold: false },
+        "type" => HighlightStyle { fg: parse_hex_color(&tc.r#type), bold: false },
+        "property" => HighlightStyle { fg: parse_hex_color(&tc.property), bold: false },
+        "operator" => HighlightStyle { fg: parse_hex_color(&tc.operator), bold: false },
+        "attribute" => HighlightStyle { fg: Color::Rgb(224, 175, 104), bold: false },
+        "variable.builtin" => HighlightStyle { fg: Color::Rgb(247, 118, 142), bold: false },
+        "variable" => HighlightStyle { fg: parse_hex_color(&tc.fg), bold: false },
+        _ => HighlightStyle { fg: parse_hex_color(&tc.fg), bold: false },
     }
 }
 
@@ -71,7 +72,7 @@ impl Highlighter {
             .find(|l| l.extensions.contains(&ext))
     }
 
-    pub fn set_language(&mut self, config: &LangConfig) {
+    pub fn set_language(&mut self, config: &LangConfig, theme_colors: &crate::config::theme::ThemeColors) {
         self.lang_name = config.name.to_string();
         self.parser.set_language(&config.language).ok();
 
@@ -80,7 +81,7 @@ impl Highlighter {
                 self.capture_styles = query
                     .capture_names()
                     .iter()
-                    .map(|name| capture_name_to_style(name))
+                    .map(|name| capture_name_to_style(name, theme_colors))
                     .collect();
                 self.query = Some(query);
                 tracing::info!("loaded language: {}", config.name);
@@ -199,4 +200,144 @@ pub fn is_env_file(path: &Path) -> bool {
         .and_then(|n| n.to_str())
         .map(|n| n == ".env" || n.starts_with(".env."))
         .unwrap_or(false)
+}
+
+pub fn is_markdown_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e == "md" || e == "markdown")
+        .unwrap_or(false)
+}
+
+pub fn markdown_style_for_line(chars: &[char], col: usize, in_code_block: bool) -> Option<HighlightStyle> {
+    let len = chars.len();
+    if len == 0 { return None; }
+
+    // find leading whitespace count
+    let leading = chars.iter().take_while(|c| c.is_whitespace()).count();
+    let trimmed_start = leading;
+
+    // fenced code block delimiter
+    if len >= trimmed_start + 3
+        && chars[trimmed_start] == '`'
+        && chars.get(trimmed_start + 1) == Some(&'`')
+        && chars.get(trimmed_start + 2) == Some(&'`')
+    {
+        return Some(HighlightStyle { fg: Color::Rgb(166, 227, 161), bold: false });
+    }
+
+    if in_code_block {
+        return Some(HighlightStyle { fg: Color::Rgb(158, 206, 106), bold: false });
+    }
+
+    // headings
+    if trimmed_start < len && chars[trimmed_start] == '#' {
+        let hash_count = chars[trimmed_start..].iter().take_while(|&&c| c == '#').count();
+        if hash_count <= 6 && chars.get(trimmed_start + hash_count) == Some(&' ') {
+            return Some(HighlightStyle { fg: Color::Rgb(187, 154, 247), bold: true });
+        }
+    }
+
+    // blockquote
+    if trimmed_start < len && chars[trimmed_start] == '>' {
+        return Some(HighlightStyle { fg: Color::Rgb(86, 95, 137), bold: false });
+    }
+
+    // list markers
+    if trimmed_start < len {
+        let c = chars[trimmed_start];
+        if (c == '-' || c == '*' || c == '+') && chars.get(trimmed_start + 1) == Some(&' ') {
+            if col <= trimmed_start + 1 {
+                return Some(HighlightStyle { fg: Color::Rgb(137, 180, 250), bold: true });
+            }
+        }
+    }
+
+    // inline code `...`
+    let mut in_bt = false;
+    let mut bt_start = 0;
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch == '`' {
+            if in_bt {
+                if col >= bt_start && col <= i {
+                    return Some(HighlightStyle { fg: Color::Rgb(166, 227, 161), bold: false });
+                }
+                in_bt = false;
+            } else {
+                bt_start = i;
+                in_bt = true;
+            }
+        }
+    }
+
+    // bold **...**
+    let mut i = 0;
+    while i + 1 < len {
+        if chars[i] == '*' && chars[i + 1] == '*' {
+            let start = i;
+            i += 2;
+            while i + 1 < len {
+                if chars[i] == '*' && chars[i + 1] == '*' {
+                    if col >= start && col <= i + 1 {
+                        return Some(HighlightStyle { fg: Color::Rgb(255, 158, 100), bold: true });
+                    }
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    // links [text](url)
+    let mut i = 0;
+    while i < len {
+        if chars[i] == '[' {
+            let link_start = i;
+            i += 1;
+            // find ](
+            while i + 1 < len {
+                if chars[i] == ']' && chars.get(i + 1) == Some(&'(') {
+                    let bracket_end = i;
+                    i += 2;
+                    while i < len && chars[i] != ')' { i += 1; }
+                    if i < len {
+                        // col in [text] part
+                        if col >= link_start && col <= bracket_end {
+                            return Some(HighlightStyle { fg: Color::Rgb(137, 180, 250), bold: false });
+                        }
+                        // col in (url) part
+                        if col > bracket_end && col <= i {
+                            return Some(HighlightStyle { fg: Color::Rgb(86, 95, 137), bold: false });
+                        }
+                        i += 1;
+                    }
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    None
+}
+
+pub fn compute_code_block_lines(buffer: &crate::editor::buffer::Buffer) -> Vec<bool> {
+    let line_count = buffer.line_count();
+    let mut result = vec![false; line_count];
+    let mut in_block = false;
+    for i in 0..line_count {
+        let text = buffer.line_text(i);
+        if text.trim_start().starts_with("```") {
+            result[i] = in_block; // the delimiter line itself uses the previous state
+            in_block = !in_block;
+        } else {
+            result[i] = in_block;
+        }
+    }
+    result
 }

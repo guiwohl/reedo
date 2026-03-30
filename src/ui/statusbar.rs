@@ -11,8 +11,8 @@ pub struct StatusBar<'a> {
 
 impl<'a> Widget for StatusBar<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let bg = Color::Rgb(30, 30, 46);
-        let fg = Color::Rgb(166, 173, 200);
+        let bg = self.app.theme.statusbar_bg();
+        let fg = self.app.theme.statusbar_fg();
         let mode_fg = match self.app.mode {
             crate::editor::mode::Mode::Normal => Color::Rgb(137, 180, 250),
             crate::editor::mode::Mode::Insert => Color::Rgb(166, 227, 161),

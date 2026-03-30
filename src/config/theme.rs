@@ -91,6 +91,14 @@ impl Default for Theme {
     }
 }
 
+impl Theme {
+    pub fn fg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.fg) }
+    pub fn gutter(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.gutter) }
+    pub fn selection(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.selection) }
+    pub fn statusbar_bg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.statusbar_bg) }
+    pub fn statusbar_fg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.statusbar_fg) }
+}
+
 pub fn parse_hex_color(hex: &str) -> ratatui::style::Color {
     let hex = hex.trim_start_matches('#');
     if hex.len() == 6 {
@@ -148,6 +156,111 @@ pub fn bundled_themes() -> Vec<Theme> {
                 number: "#fab387".into(),
                 operator: "#94e2d5".into(),
                 property: "#f38ba8".into(),
+            },
+        },
+        Theme {
+            name: "dracula".to_string(),
+            colors: ThemeColors {
+                bg: "#282a36".into(),
+                fg: "#f8f8f2".into(),
+                gutter: "#6272a4".into(),
+                cursor_bg: "#f8f8f2".into(),
+                cursor_fg: "#282a36".into(),
+                selection: "#44475a".into(),
+                statusbar_bg: "#21222c".into(),
+                statusbar_fg: "#f8f8f2".into(),
+                keyword: "#ff79c6".into(),
+                string: "#f1fa8c".into(),
+                comment: "#6272a4".into(),
+                function: "#50fa7b".into(),
+                r#type: "#8be9fd".into(),
+                number: "#bd93f9".into(),
+                operator: "#ff79c6".into(),
+                property: "#ffb86c".into(),
+            },
+        },
+        Theme {
+            name: "gruvbox".to_string(),
+            colors: ThemeColors {
+                bg: "#282828".into(),
+                fg: "#ebdbb2".into(),
+                gutter: "#665c54".into(),
+                cursor_bg: "#ebdbb2".into(),
+                cursor_fg: "#282828".into(),
+                selection: "#3c3836".into(),
+                statusbar_bg: "#1d2021".into(),
+                statusbar_fg: "#ebdbb2".into(),
+                keyword: "#fb4934".into(),
+                string: "#b8bb26".into(),
+                comment: "#928374".into(),
+                function: "#fabd2f".into(),
+                r#type: "#83a598".into(),
+                number: "#d3869b".into(),
+                operator: "#fe8019".into(),
+                property: "#8ec07c".into(),
+            },
+        },
+        Theme {
+            name: "nord".to_string(),
+            colors: ThemeColors {
+                bg: "#2e3440".into(),
+                fg: "#d8dee9".into(),
+                gutter: "#4c566a".into(),
+                cursor_bg: "#d8dee9".into(),
+                cursor_fg: "#2e3440".into(),
+                selection: "#434c5e".into(),
+                statusbar_bg: "#3b4252".into(),
+                statusbar_fg: "#d8dee9".into(),
+                keyword: "#81a1c1".into(),
+                string: "#a3be8c".into(),
+                comment: "#616e88".into(),
+                function: "#88c0d0".into(),
+                r#type: "#8fbcbb".into(),
+                number: "#b48ead".into(),
+                operator: "#81a1c1".into(),
+                property: "#d08770".into(),
+            },
+        },
+        Theme {
+            name: "rose-pine".to_string(),
+            colors: ThemeColors {
+                bg: "#191724".into(),
+                fg: "#e0def4".into(),
+                gutter: "#6e6a86".into(),
+                cursor_bg: "#e0def4".into(),
+                cursor_fg: "#191724".into(),
+                selection: "#2a2837".into(),
+                statusbar_bg: "#1f1d2e".into(),
+                statusbar_fg: "#e0def4".into(),
+                keyword: "#31748f".into(),
+                string: "#f6c177".into(),
+                comment: "#6e6a86".into(),
+                function: "#9ccfd8".into(),
+                r#type: "#c4a7e7".into(),
+                number: "#ebbcba".into(),
+                operator: "#31748f".into(),
+                property: "#eb6f92".into(),
+            },
+        },
+        Theme {
+            name: "solarized-dark".to_string(),
+            colors: ThemeColors {
+                bg: "#002b36".into(),
+                fg: "#839496".into(),
+                gutter: "#586e75".into(),
+                cursor_bg: "#839496".into(),
+                cursor_fg: "#002b36".into(),
+                selection: "#073642".into(),
+                statusbar_bg: "#073642".into(),
+                statusbar_fg: "#93a1a1".into(),
+                keyword: "#859900".into(),
+                string: "#2aa198".into(),
+                comment: "#586e75".into(),
+                function: "#268bd2".into(),
+                r#type: "#b58900".into(),
+                number: "#d33682".into(),
+                operator: "#859900".into(),
+                property: "#cb4b16".into(),
             },
         },
     ]

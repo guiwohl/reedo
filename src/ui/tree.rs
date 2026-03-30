@@ -34,7 +34,6 @@ pub enum TreeAction {
     NewFolder,
     Rename,
     Delete,
-    Move,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -61,6 +60,22 @@ impl TreeState {
         self.root = Some(root.to_path_buf());
         self.entries.clear();
         self.folder_color_idx = 0;
+
+        // virtual root entry — represents the project root folder
+        let root_name = root
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        self.entries.push(TreeEntry {
+            path: root.to_path_buf(),
+            name: root_name,
+            is_dir: true,
+            depth: 0,
+            color: Color::Rgb(137, 180, 250),
+            git_status: None,
+        });
+
         self.build_dir(root, root, 0);
     }
 
@@ -82,21 +97,29 @@ impl TreeState {
             Err(_) => return,
         };
 
-        // sort: dirs first, then alphabetical
+        // sort: dirs first, then by extension, then alphabetical within same extension
         children.sort_by(|a, b| {
             let a_dir = a.is_dir();
             let b_dir = b.is_dir();
             match (a_dir, b_dir) {
                 (true, false) => std::cmp::Ordering::Less,
                 (false, true) => std::cmp::Ordering::Greater,
-                _ => a.file_name().cmp(&b.file_name()),
+                (true, true) => a.file_name().cmp(&b.file_name()),
+                (false, false) => {
+                    let a_ext = a.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    let b_ext = b.extension().and_then(|e| e.to_str()).unwrap_or("");
+                    match a_ext.cmp(b_ext) {
+                        std::cmp::Ordering::Equal => a.file_name().cmp(&b.file_name()),
+                        other => other,
+                    }
+                }
             }
         });
 
-        // skip hidden and .git
+        // show all files except .git/
         children.retain(|p| {
             let name = p.file_name().unwrap_or_default().to_string_lossy();
-            !name.starts_with('.') || name == ".env" || name.starts_with(".env.")
+            name != ".git"
         });
 
         let dir_color = FOLDER_PALETTE[self.folder_color_idx % FOLDER_PALETTE.len()];
@@ -165,6 +188,34 @@ impl TreeState {
         }
     }
 
+    pub fn move_up_folders_only(&mut self) {
+        let mut idx = self.selected;
+        while idx > 0 {
+            idx -= 1;
+            if self.entries[idx].is_dir {
+                self.selected = idx;
+                if self.selected < self.scroll_offset {
+                    self.scroll_offset = self.selected;
+                }
+                return;
+            }
+        }
+    }
+
+    pub fn move_down_folders_only(&mut self, visible_height: usize) {
+        let mut idx = self.selected;
+        while idx + 1 < self.entries.len() {
+            idx += 1;
+            if self.entries[idx].is_dir {
+                self.selected = idx;
+                if self.selected >= self.scroll_offset + visible_height {
+                    self.scroll_offset = self.selected - visible_height + 1;
+                }
+                return;
+            }
+        }
+    }
+
     pub fn selected_entry(&self) -> Option<&TreeEntry> {
         self.entries.get(self.selected)
     }
@@ -181,7 +232,6 @@ impl TreeState {
     pub fn cancel_action(&mut self) {
         self.action = TreeAction::None;
         self.input_buf.clear();
-        self.marked_for_move = None;
     }
 
     pub fn confirm_new_file(&mut self) -> Option<PathBuf> {
@@ -192,9 +242,17 @@ impl TreeState {
         let parent = self.selected_dir();
         let new_path = parent.join(&self.input_buf);
         if let Some(dir) = new_path.parent() {
-            let _ = std::fs::create_dir_all(dir);
+            if let Err(e) = std::fs::create_dir_all(dir) {
+                tracing::error!("failed to create dir: {}", e);
+                self.cancel_action();
+                return None;
+            }
         }
-        let _ = std::fs::write(&new_path, "");
+        if let Err(e) = std::fs::write(&new_path, "") {
+            tracing::error!("failed to create file: {}", e);
+            self.cancel_action();
+            return None;
+        }
         self.cancel_action();
         if let Some(root) = self.root.clone() {
             self.build(&root);
@@ -225,7 +283,10 @@ impl TreeState {
         }
         if let Some(entry) = self.entries.get(self.selected) {
             let old_path = entry.path.clone();
-            let new_path = old_path.parent().unwrap().join(&self.input_buf);
+            let new_path = old_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(&self.input_buf);
             let _ = std::fs::rename(&old_path, &new_path);
             self.cancel_action();
             if let Some(root) = self.root.clone() {
@@ -263,21 +324,28 @@ impl TreeState {
     pub fn mark_for_move(&mut self) {
         if let Some(path) = self.selected_path().cloned() {
             self.marked_for_move = Some(path);
-            self.action = TreeAction::Move;
+            // don't set action — allow normal navigation to continue
         }
     }
 
     pub fn confirm_move(&mut self) -> Option<PathBuf> {
         let marked = self.marked_for_move.take()?;
+        // destination is the currently selected folder (or parent of selected file)
         let dest_dir = self.selected_dir();
         let file_name = marked.file_name()?;
         let new_path = dest_dir.join(file_name);
+        if marked == new_path {
+            return None; // same location, skip
+        }
         let _ = std::fs::rename(&marked, &new_path);
-        self.cancel_action();
         if let Some(root) = self.root.clone() {
             self.build(&root);
         }
         Some(new_path)
+    }
+
+    pub fn cancel_move(&mut self) {
+        self.marked_for_move = None;
     }
 
     fn selected_dir(&self) -> PathBuf {
@@ -293,31 +361,34 @@ impl TreeState {
     }
 }
 
-fn file_icon(name: &str, is_dir: bool) -> &'static str {
+fn file_icon(name: &str, is_dir: bool, is_open: bool) -> &'static str {
     if is_dir {
-        return "  ";
+        return if is_open {
+            "\u{f07c}  " // nf-fa-folder_open
+        } else {
+            "\u{f07b}  " // nf-fa-folder
+        };
     }
     let ext = name.rsplit('.').next().unwrap_or("");
     match ext {
-        "rs" => "  ",
-        "py" => "  ",
-        "js" | "mjs" | "cjs" => "  ",
-        "ts" | "tsx" => "  ",
-        "html" | "htm" => "  ",
-        "css" | "scss" => "  ",
-        "json" => "  ",
-        "toml" => "  ",
-        "yaml" | "yml" => "  ",
-        "md" => "  ",
-        "sh" | "bash" | "zsh" => "  ",
-        "php" => "  ",
-        "c" | "h" => "  ",
-        "sql" => "  ",
-        "env" => "  ",
-        "lock" => "  ",
-        "txt" => "  ",
-        "git" | "gitignore" => "  ",
-        _ => "  ",
+        "rs" => "\u{e7a8}  ",      // nf-dev-rust
+        "py" => "\u{e73c}  ",      // nf-dev-python
+        "js" | "mjs" | "cjs" => "\u{e74e}  ", // nf-dev-javascript
+        "ts" | "tsx" => "\u{e628}  ", // nf-seti-typescript
+        "html" | "htm" => "\u{e736}  ", // nf-dev-html5
+        "css" | "scss" => "\u{e749}  ", // nf-dev-css3
+        "json" => "\u{e60b}  ",    // nf-seti-json
+        "toml" => "\u{e615}  ",    // nf-seti-config
+        "yaml" | "yml" => "\u{e615}  ",
+        "md" => "\u{e73e}  ",      // nf-dev-markdown
+        "sh" | "bash" | "zsh" => "\u{e795}  ", // nf-dev-terminal
+        "php" => "\u{e73d}  ",     // nf-dev-php
+        "c" | "h" => "\u{e61e}  ", // nf-seti-c
+        "sql" => "\u{f1c0}  ",     // nf-fa-database
+        "lock" => "\u{f023}  ",    // nf-fa-lock
+        "txt" => "\u{f15c}  ",     // nf-fa-file_text
+        "gitignore" => "\u{e702}  ", // nf-dev-git
+        _ => "\u{f15b}  ",         // nf-fa-file
     }
 }
 
@@ -364,8 +435,21 @@ impl<'a> Widget for FileTreeWidget<'a> {
         let content_width = area.width.saturating_sub(1) as usize;
         let visible_height = area.height as usize;
 
-        // title
-        let title = " Explorer ";
+        // title — use project root name from entries[0]
+        let root_name = self.state.entries.first()
+            .map(|e| e.name.as_str())
+            .unwrap_or("Explorer");
+        let title = format!(" {} - Explorer ", root_name);
+        let is_root_selected = self.state.selected == 0;
+        let title_bg = if is_root_selected { selected_bg } else { bg };
+
+        // fill title bg
+        for lx in area.x..area.x + area.width - 1 {
+            buf.cell_mut((lx, area.y)).map(|cell| {
+                cell.set_style(Style::default().bg(title_bg));
+            });
+        }
+
         let mut x = area.x + 1;
         for ch in title.chars() {
             if x as usize >= area.x as usize + content_width {
@@ -376,17 +460,17 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 cell.set_style(
                     Style::default()
                         .fg(Color::Rgb(137, 180, 250))
-                        .bg(bg)
+                        .bg(title_bg)
                         .add_modifier(Modifier::BOLD),
                 );
             });
             x += 1;
         }
 
-        // entries
-        let entries_start = 1usize; // skip title row
+        // entries (skip index 0 = root, it's rendered as the title)
+        let entries_start = 1usize;
         for i in 0..(visible_height.saturating_sub(1)) {
-            let entry_idx = self.state.scroll_offset + i;
+            let entry_idx = self.state.scroll_offset + i + 1; // +1 to skip root
             let y = area.y + (entries_start + i) as u16;
             if y >= area.y + area.height {
                 break;
@@ -404,22 +488,13 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 }
 
                 let indent = "  ".repeat(entry.depth);
-                let icon = file_icon(&entry.name, entry.is_dir);
-                let dir_indicator = if entry.is_dir {
-                    if self.state.open_dirs.contains(&entry.path) {
-                        " "
-                    } else {
-                        " "
-                    }
-                } else {
-                    ""
-                };
+                let is_open = entry.is_dir && self.state.open_dirs.contains(&entry.path);
+                let icon = file_icon(&entry.name, entry.is_dir, is_open);
                 let git_str = entry
                     .git_status
                     .map(|s| format!(" {}", s))
                     .unwrap_or_default();
 
-                // marked for move indicator
                 let move_indicator =
                     if self.state.marked_for_move.as_ref() == Some(&entry.path) {
                         " [moving]"
@@ -428,11 +503,14 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     };
 
                 let display = format!(
-                    " {}{}{}{}{}{}",
-                    indent, dir_indicator, icon, entry.name, git_str, move_indicator
+                    " {}{}{}{}{}",
+                    indent, icon, entry.name, git_str, move_indicator
                 );
 
-                let name_start = 1 + indent.len() + dir_indicator.len() + icon.len();
+                // icon starts after " " + indent
+                let icon_start = 1 + indent.len();
+                let icon_end = icon_start + icon.chars().count();
+                let name_start = icon_end;
                 let name_end = name_start + entry.name.len();
 
                 let mut cx = area.x;
@@ -440,7 +518,14 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     if cx >= area.x + area.width - 1 {
                         break;
                     }
-                    let style = if ci >= name_start && ci < name_end {
+                    let style = if ci >= icon_start && ci < icon_end {
+                        // icon same color as name
+                        let mut s = Style::default().fg(entry.color).bg(line_bg);
+                        if entry.is_dir {
+                            s = s.add_modifier(Modifier::BOLD);
+                        }
+                        s
+                    } else if ci >= name_start && ci < name_end {
                         let mut s = Style::default().fg(entry.color).bg(line_bg);
                         if entry.is_dir {
                             s = s.add_modifier(Modifier::BOLD);
@@ -470,7 +555,6 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 TreeAction::NewFolder => " new folder: ",
                 TreeAction::Rename => " rename: ",
                 TreeAction::Delete => " delete? (y/n) ",
-                TreeAction::Move => " move to here (Enter) ",
                 TreeAction::None => "",
             };
             let display = format!("{}{}", label, self.state.input_buf);

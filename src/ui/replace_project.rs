@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use ratatui::buffer::Buffer as RatBuffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Color, Style};
 use ratatui::widgets::Widget;
 
 #[derive(Debug, Clone)]

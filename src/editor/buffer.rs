@@ -69,10 +69,6 @@ impl Buffer {
         s.trim_end_matches('\n').to_string()
     }
 
-    pub fn total_chars(&self) -> usize {
-        self.rope.len_chars()
-    }
-
     pub fn insert_char(&mut self, pos: Position, ch: char) -> Position {
         let idx = self.pos_to_char_idx(pos);
         self.rope.insert_char(idx, ch);

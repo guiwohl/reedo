@@ -78,8 +78,8 @@ pub fn all_languages() -> Vec<LangConfig> {
     ]
 }
 
-// highlight queries — these map tree-sitter node types to capture names
-// capture names are then mapped to colors in the theme
+// Only use named node types — no string literal patterns for keywords
+// This avoids "Invalid node type" errors across grammar versions
 
 const RUST_HIGHLIGHTS: &str = r##"
 (line_comment) @comment
@@ -90,68 +90,17 @@ const RUST_HIGHLIGHTS: &str = r##"
 (boolean_literal) @constant
 (integer_literal) @number
 (float_literal) @number
-"fn" @keyword
-"let" @keyword
-"mut" @keyword
-"pub" @keyword
-"mod" @keyword
-"use" @keyword
-"struct" @keyword
-"enum" @keyword
-"impl" @keyword
-"trait" @keyword
-"type" @keyword
-"const" @keyword
-"static" @keyword
-"if" @keyword
-"else" @keyword
-"match" @keyword
-"for" @keyword
-"while" @keyword
-"loop" @keyword
-"return" @keyword
-"break" @keyword
-"continue" @keyword
-"async" @keyword
-"await" @keyword
-"self" @keyword
-"super" @keyword
-"crate" @keyword
-"as" @keyword
-"in" @keyword
-"where" @keyword
-"ref" @keyword
-"move" @keyword
-"unsafe" @keyword
-"extern" @keyword
-"dyn" @keyword
 (type_identifier) @type
 (primitive_type) @type
 (function_item name: (identifier) @function)
 (call_expression function: (identifier) @function)
-(macro_invocation macro: (identifier) @function.macro)
+(macro_invocation macro: (identifier) @function)
 (field_identifier) @property
 (attribute_item) @attribute
-"#" @attribute
-"!" @operator
-"&" @operator
-"*" @operator
-"->" @operator
-"=>" @operator
-"::" @operator
-"=" @operator
-"==" @operator
-"!=" @operator
-"<" @operator
-">" @operator
-"<=" @operator
-">=" @operator
-"+" @operator
-"-" @operator
-"/" @operator
-"%" @operator
-"&&" @operator
-"||" @operator
+(self) @keyword
+(mutable_specifier) @keyword
+(use_declaration) @keyword
+(visibility_modifier) @keyword
 "##;
 
 const PYTHON_HIGHLIGHTS: &str = r##"
@@ -162,50 +111,11 @@ const PYTHON_HIGHLIGHTS: &str = r##"
 (true) @constant
 (false) @constant
 (none) @constant
-"def" @keyword
-"class" @keyword
-"return" @keyword
-"if" @keyword
-"elif" @keyword
-"else" @keyword
-"for" @keyword
-"while" @keyword
-"import" @keyword
-"from" @keyword
-"as" @keyword
-"with" @keyword
-"try" @keyword
-"except" @keyword
-"finally" @keyword
-"raise" @keyword
-"pass" @keyword
-"break" @keyword
-"continue" @keyword
-"and" @keyword
-"or" @keyword
-"not" @keyword
-"in" @keyword
-"is" @keyword
-"lambda" @keyword
-"yield" @keyword
-"async" @keyword
-"await" @keyword
-"self" @variable.builtin
 (function_definition name: (identifier) @function)
 (call function: (identifier) @function)
 (class_definition name: (identifier) @type)
 (decorator) @attribute
-"@" @attribute
-"=" @operator
-"==" @operator
-"!=" @operator
-"<" @operator
-">" @operator
-"+" @operator
-"-" @operator
-"*" @operator
-"/" @operator
-"%" @operator
+(identifier) @variable
 "##;
 
 const JS_HIGHLIGHTS: &str = r##"
@@ -217,55 +127,12 @@ const JS_HIGHLIGHTS: &str = r##"
 (false) @constant
 (null) @constant
 (undefined) @constant
-"function" @keyword
-"const" @keyword
-"let" @keyword
-"var" @keyword
-"return" @keyword
-"if" @keyword
-"else" @keyword
-"for" @keyword
-"while" @keyword
-"do" @keyword
-"switch" @keyword
-"case" @keyword
-"default" @keyword
-"break" @keyword
-"continue" @keyword
-"new" @keyword
-"class" @keyword
-"extends" @keyword
-"import" @keyword
-"export" @keyword
-"from" @keyword
-"async" @keyword
-"await" @keyword
-"try" @keyword
-"catch" @keyword
-"finally" @keyword
-"throw" @keyword
-"typeof" @keyword
-"instanceof" @keyword
-"this" @variable.builtin
 (function_declaration name: (identifier) @function)
 (call_expression function: (identifier) @function)
-(arrow_function) @function
 (class_declaration name: (identifier) @type)
 (property_identifier) @property
-"=" @operator
-"==" @operator
-"===" @operator
-"!=" @operator
-"!==" @operator
-"=>" @operator
-"+" @operator
-"-" @operator
-"*" @operator
-"/" @operator
-"%" @operator
-"&&" @operator
-"||" @operator
-"!" @operator
+(shorthand_property_identifier) @property
+(identifier) @variable
 "##;
 
 const TS_HIGHLIGHTS: &str = r##"
@@ -277,57 +144,12 @@ const TS_HIGHLIGHTS: &str = r##"
 (false) @constant
 (null) @constant
 (undefined) @constant
-"function" @keyword
-"const" @keyword
-"let" @keyword
-"var" @keyword
-"return" @keyword
-"if" @keyword
-"else" @keyword
-"for" @keyword
-"while" @keyword
-"do" @keyword
-"switch" @keyword
-"case" @keyword
-"default" @keyword
-"break" @keyword
-"continue" @keyword
-"new" @keyword
-"class" @keyword
-"extends" @keyword
-"import" @keyword
-"export" @keyword
-"from" @keyword
-"async" @keyword
-"await" @keyword
-"try" @keyword
-"catch" @keyword
-"finally" @keyword
-"throw" @keyword
-"typeof" @keyword
-"instanceof" @keyword
-"interface" @keyword
-"type" @keyword
-"enum" @keyword
-"implements" @keyword
-"this" @variable.builtin
 (function_declaration name: (identifier) @function)
 (call_expression function: (identifier) @function)
 (type_identifier) @type
 (class_declaration name: (identifier) @type)
 (property_identifier) @property
-"=" @operator
-"==" @operator
-"===" @operator
-"!=" @operator
-"!==" @operator
-"=>" @operator
-":" @operator
-"?" @operator
-"+" @operator
-"-" @operator
-"*" @operator
-"/" @operator
+(identifier) @variable
 "##;
 
 const HTML_HIGHLIGHTS: &str = r##"
@@ -336,12 +158,6 @@ const HTML_HIGHLIGHTS: &str = r##"
 (attribute_name) @property
 (quoted_attribute_value) @string
 (attribute_value) @string
-(doctype) @keyword
-"<" @operator
-">" @operator
-"</" @operator
-"/>" @operator
-"=" @operator
 "##;
 
 const CSS_HIGHLIGHTS: &str = r##"
@@ -355,10 +171,6 @@ const CSS_HIGHLIGHTS: &str = r##"
 (integer_value) @number
 (float_value) @number
 (plain_value) @string
-(important) @keyword
-"@" @keyword
-":" @operator
-";" @operator
 "##;
 
 const C_HIGHLIGHTS: &str = r##"
@@ -370,53 +182,18 @@ const C_HIGHLIGHTS: &str = r##"
 (true) @constant
 (false) @constant
 (null) @constant
-"if" @keyword
-"else" @keyword
-"for" @keyword
-"while" @keyword
-"do" @keyword
-"switch" @keyword
-"case" @keyword
-"default" @keyword
-"break" @keyword
-"continue" @keyword
-"return" @keyword
-"struct" @keyword
-"typedef" @keyword
-"enum" @keyword
-"union" @keyword
-"sizeof" @keyword
-"static" @keyword
-"extern" @keyword
-"const" @keyword
-"void" @keyword
-"#include" @keyword
-"#define" @keyword
-"#ifdef" @keyword
-"#ifndef" @keyword
-"#endif" @keyword
-"#if" @keyword
-"#else" @keyword
 (type_identifier) @type
 (primitive_type) @type
+(sized_type_specifier) @type
 (function_declarator declarator: (identifier) @function)
 (call_expression function: (identifier) @function)
 (field_identifier) @property
-(preproc_directive) @keyword
-"=" @operator
-"==" @operator
-"!=" @operator
-"<" @operator
-">" @operator
-"+" @operator
-"-" @operator
-"*" @operator
-"/" @operator
-"%" @operator
-"&&" @operator
-"||" @operator
-"!" @operator
-"->" @operator
+(preproc_include) @keyword
+(preproc_def) @keyword
+(preproc_ifdef) @keyword
+(preproc_if) @keyword
+(preproc_else) @keyword
+(preproc_endif) @keyword
 "##;
 
 const BASH_HIGHLIGHTS: &str = r##"
@@ -426,32 +203,8 @@ const BASH_HIGHLIGHTS: &str = r##"
 (number) @number
 (command_name) @function
 (variable_name) @property
-"if" @keyword
-"then" @keyword
-"else" @keyword
-"elif" @keyword
-"fi" @keyword
-"for" @keyword
-"while" @keyword
-"do" @keyword
-"done" @keyword
-"case" @keyword
-"esac" @keyword
-"in" @keyword
-"function" @keyword
-"return" @keyword
-"local" @keyword
-"export" @keyword
-"readonly" @keyword
-"unset" @keyword
-"$" @operator
-"|" @operator
-">" @operator
-"<" @operator
-">>" @operator
-"&&" @operator
-"||" @operator
-"=" @operator
+(variable_assignment name: (variable_name) @property)
+(function_definition name: (word) @function)
 "##;
 
 const PHP_HIGHLIGHTS: &str = r##"
@@ -461,48 +214,6 @@ const PHP_HIGHLIGHTS: &str = r##"
 (float) @number
 (boolean) @constant
 (null) @constant
-"function" @keyword
-"class" @keyword
-"public" @keyword
-"private" @keyword
-"protected" @keyword
-"static" @keyword
-"return" @keyword
-"if" @keyword
-"else" @keyword
-"elseif" @keyword
-"for" @keyword
-"foreach" @keyword
-"while" @keyword
-"do" @keyword
-"switch" @keyword
-"case" @keyword
-"default" @keyword
-"break" @keyword
-"continue" @keyword
-"new" @keyword
-"echo" @keyword
-"try" @keyword
-"catch" @keyword
-"finally" @keyword
-"throw" @keyword
-"use" @keyword
-"namespace" @keyword
-"extends" @keyword
-"implements" @keyword
-"interface" @keyword
-"abstract" @keyword
-"final" @keyword
-"const" @keyword
-"$" @operator
-"->" @operator
-"=>" @operator
-"::" @operator
-"=" @operator
-"==" @operator
-"===" @operator
-"!=" @operator
-"!==" @operator
 (name) @function
 (class_declaration name: (name) @type)
 (named_type (name) @type)
@@ -516,8 +227,6 @@ const JSON_HIGHLIGHTS: &str = r##"
 (false) @constant
 (null) @constant
 (pair key: (string) @property)
-":" @operator
-"," @operator
 "##;
 
 const MD_HIGHLIGHTS: &str = r##"
@@ -525,13 +234,7 @@ const MD_HIGHLIGHTS: &str = r##"
 (setext_heading) @keyword
 (link_destination) @string
 (link_text) @property
-(emphasis) @keyword
-(strong_emphasis) @keyword
 (code_span) @string
 (fenced_code_block) @string
 (block_quote) @comment
-(list_marker_plus) @operator
-(list_marker_minus) @operator
-(list_marker_star) @operator
-(list_marker_dot) @operator
 "##;

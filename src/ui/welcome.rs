@@ -4,51 +4,36 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
 const LOGO: &[&str] = &[
-    r"  ██╗  ██╗██╗██╗      ██████╗ ",
-    r"  ██║ ██╔╝██║██║     ██╔═══██╗",
-    r"  █████╔╝ ██║██║     ██║   ██║",
-    r"  ██╔═██╗ ██║██║     ██║   ██║",
-    r"  ██║  ██╗██║███████╗╚██████╔╝",
-    r"  ╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ",
+    r" _    _ _       ",
+    r"| | _(_) | ___  ",
+    r"| |/ / | |/ _ \ ",
+    r"|   <| | | (_) |",
+    r"|_|\_\_|_|\___/ ",
 ];
 
-const HINTS: &[&str] = &[
-    "",
-    "  a minimal text editor",
-    "",
-    "  i          enter insert mode",
-    "  ctrl+e     file explorer",
-    "  ctrl+p     fuzzy finder",
-    "  ctrl+f     search in file",
-    "  ctrl+h     find & replace",
-    "  ctrl+q     quit",
-];
+const SUBTITLE: &str = "a minimal text editor";
+const HINT: &str = "press F1 or ? for keybindings";
 
 pub struct WelcomeScreen;
 
 impl Widget for WelcomeScreen {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let total_lines = LOGO.len() + HINTS.len();
+        let total_lines = LOGO.len() + 3;
         let start_y = area
             .height
             .saturating_sub(total_lines as u16)
             / 3;
 
         let logo_color = Color::Rgb(137, 180, 250);
-        let hint_color = Color::Rgb(86, 95, 137);
-        let key_color = Color::Rgb(166, 227, 161);
+        let sub_color = Color::Rgb(86, 95, 137);
 
         for (i, line) in LOGO.iter().enumerate() {
             let y = area.y + start_y + i as u16;
-            if y >= area.y + area.height {
-                break;
-            }
+            if y >= area.y + area.height { break; }
             let x_offset = area.width.saturating_sub(line.len() as u16) / 2;
             let mut x = area.x + x_offset;
             for ch in line.chars() {
-                if x >= area.x + area.width {
-                    break;
-                }
+                if x >= area.x + area.width { break; }
                 buf.cell_mut((x, y)).map(|cell| {
                     cell.set_char(ch);
                     cell.set_style(
@@ -61,63 +46,33 @@ impl Widget for WelcomeScreen {
             }
         }
 
-        for (i, line) in HINTS.iter().enumerate() {
-            let y = area.y + start_y + LOGO.len() as u16 + i as u16;
-            if y >= area.y + area.height {
-                break;
-            }
-            if line.is_empty() {
-                continue;
-            }
-
-            let x_offset = area.width.saturating_sub(30) / 2;
+        // subtitle
+        let sub_y = area.y + start_y + LOGO.len() as u16 + 1;
+        if sub_y < area.y + area.height {
+            let x_offset = area.width.saturating_sub(SUBTITLE.len() as u16) / 2;
             let mut x = area.x + x_offset;
+            for ch in SUBTITLE.chars() {
+                if x >= area.x + area.width { break; }
+                buf.cell_mut((x, sub_y)).map(|cell| {
+                    cell.set_char(ch);
+                    cell.set_style(Style::default().fg(sub_color));
+                });
+                x += 1;
+            }
+        }
 
-            // parse "  key     description" format
-            let trimmed = line.trim_start();
-            let spaces = line.len() - trimmed.len();
-            x += spaces as u16;
-
-            let parts: Vec<&str> = trimmed.splitn(2, "  ").collect();
-            if parts.len() == 2 {
-                // key part
-                for ch in parts[0].chars() {
-                    if x >= area.x + area.width {
-                        break;
-                    }
-                    buf.cell_mut((x, y)).map(|cell| {
-                        cell.set_char(ch);
-                        cell.set_style(Style::default().fg(key_color));
-                    });
-                    x += 1;
-                }
-                // spacing
-                let padding = trimmed.find(parts[1]).unwrap_or(parts[0].len() + 2);
-                while x < area.x + x_offset + padding as u16 {
-                    x += 1;
-                }
-                // description
-                for ch in parts[1].chars() {
-                    if x >= area.x + area.width {
-                        break;
-                    }
-                    buf.cell_mut((x, y)).map(|cell| {
-                        cell.set_char(ch);
-                        cell.set_style(Style::default().fg(hint_color));
-                    });
-                    x += 1;
-                }
-            } else {
-                for ch in trimmed.chars() {
-                    if x >= area.x + area.width {
-                        break;
-                    }
-                    buf.cell_mut((x, y)).map(|cell| {
-                        cell.set_char(ch);
-                        cell.set_style(Style::default().fg(hint_color));
-                    });
-                    x += 1;
-                }
+        // hint
+        let hint_y = sub_y + 1;
+        if hint_y < area.y + area.height {
+            let x_offset = area.width.saturating_sub(HINT.len() as u16) / 2;
+            let mut x = area.x + x_offset;
+            for ch in HINT.chars() {
+                if x >= area.x + area.width { break; }
+                buf.cell_mut((x, hint_y)).map(|cell| {
+                    cell.set_char(ch);
+                    cell.set_style(Style::default().fg(Color::Rgb(69, 71, 90)));
+                });
+                x += 1;
             }
         }
     }

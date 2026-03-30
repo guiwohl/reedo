@@ -149,9 +149,35 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.popup = crate::app::Popup::FuzzyFinder;
         }
         KeyCode::Char(',') if ctrl => {
-            // open config file
             let config_path = crate::config::settings::Settings::config_path();
             let _ = app.open_file(&config_path);
+        }
+        KeyCode::Char('t') if ctrl => {
+            app.theme_switcher_state.reset();
+            app.popup = crate::app::Popup::ThemeSwitcher;
+        }
+        // keybind help — multiple bindings to cover terminal differences
+        KeyCode::Char('/') if ctrl => {
+            app.keybind_help_state.reset();
+            app.popup = crate::app::Popup::KeybindHelp;
+        }
+        KeyCode::Char('?') if ctrl => {
+            app.keybind_help_state.reset();
+            app.popup = crate::app::Popup::KeybindHelp;
+        }
+        KeyCode::Char('?') if shift => {
+            if app.mode == Mode::Normal {
+                app.keybind_help_state.reset();
+                app.popup = crate::app::Popup::KeybindHelp;
+            }
+        }
+        KeyCode::Char('\x1f') => {
+            app.keybind_help_state.reset();
+            app.popup = crate::app::Popup::KeybindHelp;
+        }
+        KeyCode::F(1) => {
+            app.keybind_help_state.reset();
+            app.popup = crate::app::Popup::KeybindHelp;
         }
 
         // navigation: ctrl+alt+arrows = paragraph jump

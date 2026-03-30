@@ -4,6 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
 use crate::app::App;
+use crate::git::status::GutterMark;
 use crate::syntax::highlight;
 
 pub struct EditorView<'a> {
@@ -12,9 +13,18 @@ pub struct EditorView<'a> {
 
 impl<'a> Widget for EditorView<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
+        let t = &self.app.theme;
+        let theme_fg = t.fg();
+        let theme_gutter = t.gutter();
+        let theme_selection = t.selection();
+        let theme_cursor_bg = Color::Rgb(249, 226, 175); // yellow — always
+        let theme_cursor_fg = Color::Rgb(24, 24, 37);
+
         let line_count = self.app.buffer.line_count();
         let max_line_num_width = format!("{}", line_count).len().max(3);
-        let gutter_width = max_line_num_width as u16 + 1;
+        let has_git_gutter = !self.app.gutter_marks.is_empty();
+        let git_gutter_width: u16 = if has_git_gutter { 1 } else { 0 };
+        let gutter_width = git_gutter_width + max_line_num_width as u16 + 1;
         let h_padding = self.app.horizontal_padding as u16;
 
         let text_area_x = area.x + gutter_width + h_padding;
@@ -35,20 +45,50 @@ impl<'a> Widget for EditorView<'a> {
             .map(|p| highlight::is_env_file(p))
             .unwrap_or(false);
 
+        let is_md = self
+            .app
+            .buffer
+            .file_path
+            .as_ref()
+            .map(|p| highlight::is_markdown_file(p))
+            .unwrap_or(false);
+
+        let md_code_lines = if is_md {
+            highlight::compute_code_block_lines(&self.app.buffer)
+        } else {
+            Vec::new()
+        };
+
         for row in 0..viewport_height {
             let file_line = self.app.viewport_top + row;
             let y = area.y + row as u16;
 
             if file_line < line_count {
+                // git gutter mark
+                if has_git_gutter {
+                    let mark_x = area.x;
+                    if let Some(mark) = self.app.gutter_marks.get(&file_line) {
+                        let (ch, color) = match mark {
+                            GutterMark::Added => ('│', Color::Rgb(166, 227, 161)),    // green
+                            GutterMark::Modified => ('│', Color::Rgb(249, 226, 175)), // yellow
+                            GutterMark::Deleted => ('▸', Color::Rgb(247, 118, 142)),  // red
+                        };
+                        buf.cell_mut((mark_x, y)).map(|cell| {
+                            cell.set_char(ch);
+                            cell.set_style(Style::default().fg(color));
+                        });
+                    }
+                }
+
                 // line number
                 let num_str = format!(
                     "{:>width$} ",
                     file_line + 1,
                     width = max_line_num_width
                 );
-                let gutter_style = Style::default().fg(Color::DarkGray);
+                let gutter_style = Style::default().fg(theme_gutter);
                 for (i, ch) in num_str.chars().enumerate() {
-                    let x = area.x + i as u16;
+                    let x = area.x + git_gutter_width + i as u16;
                     if x < area.x + area.width {
                         buf.cell_mut((x, y)).map(|cell| {
                             cell.set_char(ch);
@@ -70,20 +110,28 @@ impl<'a> Widget for EditorView<'a> {
                     let file_col = scroll_col + i;
 
                     // syntax highlighting
-                    let mut style = if self.app.highlighter.is_active() {
+                    let mut style = if is_md {
+                        let in_code = md_code_lines.get(file_line).copied().unwrap_or(false);
+                        let line_chars: Vec<char> = line_text.chars().collect();
+                        if let Some(hs) = highlight::markdown_style_for_line(&line_chars, file_col, in_code) {
+                            hs.to_ratatui_style()
+                        } else {
+                            Style::default().fg(theme_fg)
+                        }
+                    } else if self.app.highlighter.is_active() {
                         if let Some(hs) = self.app.highlighter.style_for(file_line, file_col) {
                             hs.to_ratatui_style()
                         } else {
-                            Style::default().fg(Color::Rgb(192, 202, 245))
+                            Style::default().fg(theme_fg)
                         }
                     } else if is_env {
                         if let Some(hs) = highlight::env_style_for_line(&line_text, file_col) {
                             hs.to_ratatui_style()
                         } else {
-                            Style::default().fg(Color::Rgb(192, 202, 245))
+                            Style::default().fg(theme_fg)
                         }
                     } else {
-                        Style::default().fg(Color::Rgb(192, 202, 245))
+                        Style::default().fg(theme_fg)
                     };
 
                     // selection overlay
@@ -98,7 +146,7 @@ impl<'a> Widget for EditorView<'a> {
                             file_line > ss.line && file_line < se.line
                         };
                         if in_selection {
-                            style = style.bg(Color::Rgb(60, 60, 100));
+                            style = style.bg(theme_selection);
                         }
                     }
 
@@ -133,14 +181,27 @@ impl<'a> Widget for EditorView<'a> {
         let cursor_x = text_area_x + cursor_screen_col as u16;
 
         if cursor_y < area.y + area.height && cursor_x < area.x + area.width {
-            buf.cell_mut((cursor_x, cursor_y)).map(|cell| {
-                cell.set_style(
-                    Style::default()
-                        .fg(Color::Black)
-                        .bg(Color::White)
-                        .add_modifier(Modifier::BOLD),
-                );
-            });
+            match self.app.mode {
+                crate::editor::mode::Mode::Normal => {
+                    buf.cell_mut((cursor_x, cursor_y)).map(|cell| {
+                        cell.set_style(
+                            Style::default()
+                                .fg(theme_cursor_fg)
+                                .bg(theme_cursor_bg)
+                                .add_modifier(Modifier::BOLD),
+                        );
+                    });
+                }
+                crate::editor::mode::Mode::Insert => {
+                    buf.cell_mut((cursor_x, cursor_y)).map(|cell| {
+                        cell.set_style(
+                            cell.style()
+                                .add_modifier(Modifier::UNDERLINED)
+                                .fg(theme_cursor_bg),
+                        );
+                    });
+                }
+            }
         }
     }
 }

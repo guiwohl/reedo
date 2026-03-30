@@ -139,7 +139,6 @@ impl<'a> Widget for ProjectSearchWidget<'a> {
         let selected_bg = Color::Rgb(45, 45, 65);
         let accent = Color::Rgb(137, 180, 250);
         let dim = Color::Rgb(86, 95, 137);
-        let match_color = Color::Rgb(249, 226, 175);
 
         // fill bg
         for y in area.y..area.y + area.height {

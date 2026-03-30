@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use clap::Parser;
+use crossterm::cursor::SetCursorStyle;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::execute;
@@ -27,6 +28,8 @@ use ui::fuzzy::FuzzyFinderWidget;
 use ui::tree::FileTreeWidget;
 use ui::search_project::ProjectSearchWidget;
 use ui::replace_project::ProjectReplaceWidget;
+use ui::theme_switcher::ThemeSwitcherWidget;
+use ui::keybind_help::KeybindHelpWidget;
 use ui::welcome::WelcomeScreen;
 
 #[derive(Parser)]
@@ -201,11 +204,43 @@ fn event_loop(
                         popup_area,
                     );
                 }
+                Popup::ThemeSwitcher => {
+                    let popup_width = (full_area.width * 40 / 100).max(35);
+                    let popup_height = (full_area.height * 50 / 100).max(10);
+                    let x = (full_area.width - popup_width) / 2;
+                    let y = (full_area.height - popup_height) / 4;
+                    let popup_area = Rect::new(x, y, popup_width, popup_height);
+                    frame.render_widget(
+                        ThemeSwitcherWidget { state: &app.theme_switcher_state },
+                        popup_area,
+                    );
+                }
+                Popup::KeybindHelp => {
+                    let popup_width = (full_area.width * 55 / 100).max(50);
+                    let popup_height = (full_area.height * 75 / 100).max(20);
+                    let x = (full_area.width - popup_width) / 2;
+                    let y = (full_area.height - popup_height) / 4;
+                    let popup_area = Rect::new(x, y, popup_width, popup_height);
+                    frame.render_widget(
+                        KeybindHelpWidget { state: &app.keybind_help_state },
+                        popup_area,
+                    );
+                }
                 _ => {}
             }
         })?;
 
         terminal.hide_cursor()?;
+
+        // set terminal cursor shape based on mode
+        match app.mode {
+            crate::editor::mode::Mode::Normal => {
+                execute!(terminal.backend_mut(), SetCursorStyle::SteadyBlock)?;
+            }
+            crate::editor::mode::Mode::Insert => {
+                execute!(terminal.backend_mut(), SetCursorStyle::SteadyBar)?;
+            }
+        }
 
         if event::poll(Duration::from_millis(50))? {
             match event::read()? {
@@ -364,6 +399,22 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             use crate::ui::tree::TreeAction;
             let visible = app.viewport_height.saturating_sub(2);
 
+            // ctrl+z/ctrl+y work on the buffer even while tree is open
+            if ctrl && key.code == KeyCode::Char('z') {
+                if let Some(pos) = app.buffer.apply_undo() {
+                    app.cursor.move_to(pos.line, pos.col, false);
+                    app.cursor.update_desired_col();
+                }
+                return;
+            }
+            if ctrl && key.code == KeyCode::Char('y') {
+                if let Some(pos) = app.buffer.apply_redo() {
+                    app.cursor.move_to(pos.line, pos.col, false);
+                    app.cursor.update_desired_col();
+                }
+                return;
+            }
+
             // handle active action input first
             if app.tree_state.action != TreeAction::None {
                 match key.code {
@@ -384,9 +435,6 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                             }
                             TreeAction::Delete => {
                                 app.tree_state.confirm_delete();
-                            }
-                            TreeAction::Move => {
-                                app.tree_state.confirm_move();
                             }
                             TreeAction::None => {}
                         }
@@ -410,18 +458,47 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
 
             match key.code {
                 KeyCode::Esc => {
-                    app.popup = Popup::None;
+                    if app.tree_state.marked_for_move.is_some() {
+                        app.tree_state.cancel_move();
+                    } else {
+                        app.popup = Popup::None;
+                    }
                 }
-                KeyCode::Up => app.tree_state.move_up(),
-                KeyCode::Down => app.tree_state.move_down(visible),
-                KeyCode::Enter | KeyCode::Right => {
-                    if let Some(entry) = app.tree_state.selected_entry() {
+                KeyCode::Up => {
+                    if app.tree_state.marked_for_move.is_some() {
+                        app.tree_state.move_up_folders_only();
+                    } else {
+                        app.tree_state.move_up();
+                    }
+                }
+                KeyCode::Down => {
+                    if app.tree_state.marked_for_move.is_some() {
+                        app.tree_state.move_down_folders_only(visible);
+                    } else {
+                        app.tree_state.move_down(visible);
+                    }
+                }
+                KeyCode::Enter => {
+                    if app.tree_state.marked_for_move.is_some() {
+                        if let Some(entry) = app.tree_state.selected_entry() {
+                            if entry.is_dir {
+                                app.tree_state.confirm_move();
+                            }
+                        }
+                    } else if let Some(entry) = app.tree_state.selected_entry() {
                         if entry.is_dir {
                             app.tree_state.toggle_dir();
                         } else {
                             let path = entry.path.clone();
                             let _ = app.open_file(&path);
                             app.popup = Popup::None;
+                        }
+                    }
+                }
+                KeyCode::Right => {
+                    if let Some(entry) = app.tree_state.selected_entry() {
+                        if entry.is_dir && !app.tree_state.open_dirs.contains(&entry.path) {
+                            app.tree_state.toggle_dir();
                         }
                     }
                 }
@@ -446,7 +523,7 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                 }
                 KeyCode::Char('m') if !ctrl => {
                     if app.tree_state.marked_for_move.is_some() {
-                        // already marked, confirm move to current location
+                        // second m press: move to selected folder
                         app.tree_state.confirm_move();
                     } else {
                         app.tree_state.mark_for_move();
@@ -551,6 +628,47 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                     KeyCode::Char(ch) if !ctrl => app.project_replace_state.insert_char(ch),
                     _ => {}
                 }
+            }
+        }
+
+        Popup::ThemeSwitcher => {
+            match key.code {
+                KeyCode::Esc => {
+                    app.popup = Popup::None;
+                }
+                KeyCode::Up => app.theme_switcher_state.move_up(),
+                KeyCode::Down => app.theme_switcher_state.move_down(),
+                KeyCode::Enter => {
+                    if let Some(selected) = app.theme_switcher_state.selected_theme().cloned() {
+                        app.theme = selected;
+                        // re-apply highlight colors with new theme
+                        if app.highlighter.is_active() {
+                            if let Some(config) = crate::syntax::highlight::Highlighter::detect_language(
+                                app.buffer.file_path.as_deref().unwrap_or(std::path::Path::new("")),
+                            ) {
+                                app.highlighter.set_language(&config, &app.theme.colors);
+                                let source = app.buffer.rope.to_string();
+                                app.highlighter.parse(&source);
+                                app.highlighter.compute_styles(&source);
+                            }
+                        }
+                    }
+                    app.popup = Popup::None;
+                }
+                _ => {}
+            }
+        }
+
+        Popup::KeybindHelp => {
+            let max_scroll = crate::ui::keybind_help::KeybindHelpState::total_lines()
+                .saturating_sub(app.viewport_height.saturating_sub(6));
+            match key.code {
+                KeyCode::Esc => {
+                    app.popup = Popup::None;
+                }
+                KeyCode::Up => app.keybind_help_state.scroll_up(),
+                KeyCode::Down => app.keybind_help_state.scroll_down(max_scroll),
+                _ => {}
             }
         }
 
