@@ -92,11 +92,45 @@ impl Default for Theme {
 }
 
 impl Theme {
+    pub fn bg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.bg) }
     pub fn fg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.fg) }
     pub fn gutter(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.gutter) }
     pub fn selection(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.selection) }
     pub fn statusbar_bg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.statusbar_bg) }
     pub fn statusbar_fg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.statusbar_fg) }
+    pub fn comment(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.comment) }
+    pub fn function(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.function) }
+
+    pub fn popup_bg(&self) -> ratatui::style::Color {
+        // slightly lighter/darker than main bg for contrast
+        let c = parse_hex_color(&self.colors.bg);
+        match c {
+            ratatui::style::Color::Rgb(r, g, b) => {
+                ratatui::style::Color::Rgb(
+                    r.saturating_add(8),
+                    g.saturating_add(8),
+                    b.saturating_add(8),
+                )
+            }
+            _ => c,
+        }
+    }
+
+    pub fn popup_selected(&self) -> ratatui::style::Color {
+        self.selection()
+    }
+
+    pub fn popup_border(&self) -> ratatui::style::Color {
+        self.gutter()
+    }
+
+    pub fn popup_accent(&self) -> ratatui::style::Color {
+        self.function()
+    }
+
+    pub fn popup_dim(&self) -> ratatui::style::Color {
+        self.comment()
+    }
 }
 
 pub fn parse_hex_color(hex: &str) -> ratatui::style::Color {

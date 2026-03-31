@@ -199,15 +199,16 @@ fn is_binary_ext(ext: &str) -> bool {
 
 pub struct ProjectReplaceWidget<'a> {
     pub state: &'a ProjectReplaceState,
+    pub theme: &'a crate::config::theme::Theme,
 }
 
 impl<'a> Widget for ProjectReplaceWidget<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let bg = Color::Rgb(24, 24, 37);
-        let fg = Color::Rgb(192, 202, 245);
-        let accent = Color::Rgb(137, 180, 250);
-        let border_color = Color::Rgb(69, 71, 90);
-        let active_bg = Color::Rgb(45, 45, 65);
+        let bg = self.theme.popup_bg();
+        let fg = self.theme.fg();
+        let accent = self.theme.popup_accent();
+        let border_color = self.theme.popup_border();
+        let active_bg = self.theme.popup_selected();
         let warn = Color::Rgb(249, 226, 175);
 
         // fill bg

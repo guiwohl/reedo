@@ -14,11 +14,22 @@ pub struct EditorView<'a> {
 impl<'a> Widget for EditorView<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
         let t = &self.app.theme;
+        let theme_bg = t.bg();
         let theme_fg = t.fg();
         let theme_gutter = t.gutter();
         let theme_selection = t.selection();
-        let theme_cursor_bg = Color::Rgb(249, 226, 175); // yellow — always
+        let theme_cursor_bg = Color::Rgb(249, 226, 175);
         let theme_cursor_fg = Color::Rgb(24, 24, 37);
+
+        // fill entire editor area with theme background
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                buf.cell_mut((x, y)).map(|cell| {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(theme_bg));
+                });
+            }
+        }
 
         let line_count = self.app.buffer.line_count();
         let max_line_num_width = format!("{}", line_count).len().max(3);

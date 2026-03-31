@@ -46,7 +46,16 @@ pub struct TreeState {
     pub action: TreeAction,
     pub input_buf: String,
     pub marked_for_move: Option<PathBuf>,
+    pub fs_undo_stack: Vec<FsOperation>,
     folder_color_idx: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum FsOperation {
+    Move { from: PathBuf, to: PathBuf },
+    Create { path: PathBuf, is_dir: bool },
+    Delete { path: PathBuf, content: Option<String>, is_dir: bool },
+    Rename { from: PathBuf, to: PathBuf },
 }
 
 impl Default for TreeAction {
@@ -253,6 +262,7 @@ impl TreeState {
             self.cancel_action();
             return None;
         }
+        self.fs_undo_stack.push(FsOperation::Create { path: new_path.clone(), is_dir: false });
         self.cancel_action();
         if let Some(root) = self.root.clone() {
             self.build(&root);
@@ -268,6 +278,7 @@ impl TreeState {
         let parent = self.selected_dir();
         let new_path = parent.join(&self.input_buf);
         let _ = std::fs::create_dir_all(&new_path);
+        self.fs_undo_stack.push(FsOperation::Create { path: new_path.clone(), is_dir: true });
         self.open_dirs.insert(new_path.clone());
         self.cancel_action();
         if let Some(root) = self.root.clone() {
@@ -287,7 +298,9 @@ impl TreeState {
                 .parent()
                 .unwrap_or(Path::new("."))
                 .join(&self.input_buf);
-            let _ = std::fs::rename(&old_path, &new_path);
+            if std::fs::rename(&old_path, &new_path).is_ok() {
+                self.fs_undo_stack.push(FsOperation::Rename { from: old_path, to: new_path.clone() });
+            }
             self.cancel_action();
             if let Some(root) = self.root.clone() {
                 self.build(&root);
@@ -301,12 +314,20 @@ impl TreeState {
     pub fn confirm_delete(&mut self) -> bool {
         if let Some(entry) = self.entries.get(self.selected) {
             let path = entry.path.clone();
-            let result = if entry.is_dir {
+            let is_dir = entry.is_dir;
+            // save file content for undo (only for files, not dirs)
+            let content = if !is_dir {
+                std::fs::read_to_string(&path).ok()
+            } else {
+                None
+            };
+            let result = if is_dir {
                 std::fs::remove_dir_all(&path)
             } else {
                 std::fs::remove_file(&path)
             };
             if result.is_ok() {
+                self.fs_undo_stack.push(FsOperation::Delete { path: path.clone(), content, is_dir });
                 self.cancel_action();
                 if let Some(root) = self.root.clone() {
                     self.build(&root);
@@ -337,7 +358,9 @@ impl TreeState {
         if marked == new_path {
             return None; // same location, skip
         }
-        let _ = std::fs::rename(&marked, &new_path);
+        if std::fs::rename(&marked, &new_path).is_ok() {
+            self.fs_undo_stack.push(FsOperation::Move { from: marked, to: new_path.clone() });
+        }
         if let Some(root) = self.root.clone() {
             self.build(&root);
         }
@@ -346,6 +369,42 @@ impl TreeState {
 
     pub fn cancel_move(&mut self) {
         self.marked_for_move = None;
+    }
+
+    pub fn undo_last_fs_op(&mut self) -> bool {
+        let op = match self.fs_undo_stack.pop() {
+            Some(op) => op,
+            None => return false,
+        };
+        let ok = match op {
+            FsOperation::Move { from, to } => {
+                std::fs::rename(&to, &from).is_ok()
+            }
+            FsOperation::Create { ref path, is_dir } => {
+                if is_dir {
+                    std::fs::remove_dir_all(path).is_ok()
+                } else {
+                    std::fs::remove_file(path).is_ok()
+                }
+            }
+            FsOperation::Delete { ref path, ref content, is_dir } => {
+                if is_dir {
+                    std::fs::create_dir_all(path).is_ok()
+                } else {
+                    let data = content.as_deref().unwrap_or("");
+                    std::fs::write(path, data).is_ok()
+                }
+            }
+            FsOperation::Rename { from, to } => {
+                std::fs::rename(&to, &from).is_ok()
+            }
+        };
+        if ok {
+            if let Some(root) = self.root.clone() {
+                self.build(&root);
+            }
+        }
+        ok
     }
 
     fn selected_dir(&self) -> PathBuf {
@@ -394,14 +453,15 @@ fn file_icon(name: &str, is_dir: bool, is_open: bool) -> &'static str {
 
 pub struct FileTreeWidget<'a> {
     pub state: &'a TreeState,
+    pub theme: &'a crate::config::theme::Theme,
 }
 
 impl<'a> Widget for FileTreeWidget<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let bg = Color::Rgb(24, 24, 37);
-        let border_color = Color::Rgb(69, 71, 90);
-        let selected_bg = Color::Rgb(45, 45, 65);
-        let dim = Color::Rgb(86, 95, 137);
+        let bg = self.theme.popup_bg();
+        let border_color = self.theme.popup_border();
+        let selected_bg = self.theme.popup_selected();
+        let dim = self.theme.popup_dim();
         let git_colors = |status: char| -> Color {
             match status {
                 'M' => Color::Rgb(249, 226, 175), // yellow
@@ -439,7 +499,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
         let root_name = self.state.entries.first()
             .map(|e| e.name.as_str())
             .unwrap_or("Explorer");
-        let title = format!(" {} - Explorer ", root_name);
+        let title = format!(" \u{f015}  {} - Explorer ", root_name); // nf-fa-home
         let is_root_selected = self.state.selected == 0;
         let title_bg = if is_root_selected { selected_bg } else { bg };
 
@@ -459,7 +519,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 cell.set_char(ch);
                 cell.set_style(
                     Style::default()
-                        .fg(Color::Rgb(137, 180, 250))
+                        .fg(self.theme.popup_accent())
                         .bg(title_bg)
                         .add_modifier(Modifier::BOLD),
                 );

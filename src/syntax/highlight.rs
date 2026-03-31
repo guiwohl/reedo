@@ -124,39 +124,39 @@ impl Highlighter {
         let root = tree.root_node();
         let mut matches = cursor.matches(query, root, source.as_bytes());
 
-        while let Some(m) = matches.next() {
-            for cap in m.captures {
-                let style = self.capture_styles[cap.index as usize];
-                let node = cap.node;
-                let start = node.start_position();
-                let end = node.end_position();
+        // catch_unwind protects against tree-sitter C assertion failures
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut styles: HashMap<usize, Vec<(usize, usize, HighlightStyle)>> = HashMap::new();
+            while let Some(m) = matches.next() {
+                for cap in m.captures {
+                    let style_idx = cap.index as usize;
+                    if style_idx >= self.capture_styles.len() { continue; }
+                    let style = self.capture_styles[style_idx];
+                    let node = cap.node;
+                    let start = node.start_position();
+                    let end = node.end_position();
 
-                if start.row == end.row {
-                    self.line_styles
-                        .entry(start.row)
-                        .or_default()
-                        .push((start.column, end.column, style));
-                } else {
-                    // multi-line: first line from start to end of line
-                    self.line_styles
-                        .entry(start.row)
-                        .or_default()
-                        .push((start.column, usize::MAX, style));
-                    // middle lines: full line
-                    for row in (start.row + 1)..end.row {
-                        self.line_styles
-                            .entry(row)
-                            .or_default()
-                            .push((0, usize::MAX, style));
-                    }
-                    // last line: start of line to end col
-                    if end.column > 0 {
-                        self.line_styles
-                            .entry(end.row)
-                            .or_default()
-                            .push((0, end.column, style));
+                    if start.row == end.row {
+                        styles.entry(start.row).or_default().push((start.column, end.column, style));
+                    } else {
+                        styles.entry(start.row).or_default().push((start.column, usize::MAX, style));
+                        for row in (start.row + 1)..end.row {
+                            styles.entry(row).or_default().push((0, usize::MAX, style));
+                        }
+                        if end.column > 0 {
+                            styles.entry(end.row).or_default().push((0, end.column, style));
+                        }
                     }
                 }
+            }
+            styles
+        }));
+
+        match result {
+            Ok(styles) => self.line_styles = styles,
+            Err(_) => {
+                tracing::warn!("tree-sitter panicked during highlight for {}", self.lang_name);
+                self.query = None;
             }
         }
     }

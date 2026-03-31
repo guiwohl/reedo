@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer as RatBuffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
 
 const LOGO: &[&str] = &[
@@ -14,9 +14,11 @@ const LOGO: &[&str] = &[
 const SUBTITLE: &str = "a minimal text editor";
 const HINT: &str = "press F1 or ? for keybindings";
 
-pub struct WelcomeScreen;
+pub struct WelcomeScreen<'a> {
+    pub theme: &'a crate::config::theme::Theme,
+}
 
-impl Widget for WelcomeScreen {
+impl<'a> Widget for WelcomeScreen<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
         let total_lines = LOGO.len() + 3;
         let start_y = area
@@ -24,8 +26,8 @@ impl Widget for WelcomeScreen {
             .saturating_sub(total_lines as u16)
             / 3;
 
-        let logo_color = Color::Rgb(137, 180, 250);
-        let sub_color = Color::Rgb(86, 95, 137);
+        let logo_color = self.theme.popup_accent();
+        let sub_color = self.theme.popup_dim();
 
         for (i, line) in LOGO.iter().enumerate() {
             let y = area.y + start_y + i as u16;
@@ -70,7 +72,7 @@ impl Widget for WelcomeScreen {
                 if x >= area.x + area.width { break; }
                 buf.cell_mut((x, hint_y)).map(|cell| {
                     cell.set_char(ch);
-                    cell.set_style(Style::default().fg(Color::Rgb(69, 71, 90)));
+                    cell.set_style(Style::default().fg(self.theme.popup_border()));
                 });
                 x += 1;
             }

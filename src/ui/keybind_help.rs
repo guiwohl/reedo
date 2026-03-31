@@ -133,12 +133,13 @@ impl KeybindHelpState {
 
 pub struct KeybindHelpWidget<'a> {
     pub state: &'a KeybindHelpState,
+    pub theme: &'a crate::config::theme::Theme,
 }
 
 impl<'a> Widget for KeybindHelpWidget<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let bg = Color::Rgb(24, 24, 37);
-        let border_color = Color::Rgb(69, 71, 90);
+        let bg = self.theme.popup_bg();
+        let border_color = self.theme.popup_border();
         let section_color = Color::Rgb(187, 154, 247);
         let key_color = Color::Rgb(249, 226, 175);
         let desc_color = Color::Rgb(166, 173, 200);
@@ -170,7 +171,7 @@ impl<'a> Widget for KeybindHelpWidget<'a> {
                     cell.set_char(ch);
                     cell.set_style(
                         Style::default()
-                            .fg(Color::Rgb(137, 180, 250))
+                            .fg(self.theme.popup_accent())
                             .bg(bg)
                             .add_modifier(Modifier::BOLD),
                     );

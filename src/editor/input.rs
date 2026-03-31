@@ -39,20 +39,18 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             tracing::debug!("mode -> Insert (Insert key)");
         }
 
-        // ctrl+z undo
         KeyCode::Char('z') if ctrl => {
             if let Some(pos) = app.buffer.apply_undo() {
                 app.cursor.move_to(pos.line, pos.col, false);
                 app.cursor.update_desired_col();
-                tracing::debug!("undo -> {:?}", pos);
+                app.mark_edited();
             }
         }
-        // ctrl+y redo
         KeyCode::Char('y') if ctrl => {
             if let Some(pos) = app.buffer.apply_redo() {
                 app.cursor.move_to(pos.line, pos.col, false);
                 app.cursor.update_desired_col();
-                tracing::debug!("redo -> {:?}", pos);
+                app.mark_edited();
             }
         }
 
@@ -164,6 +162,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.padding_input = app.horizontal_padding.to_string();
             app.popup = crate::app::Popup::PaddingInput;
         }
+        KeyCode::F(2) => {
+            app.padding_input = app.horizontal_padding.to_string();
+            app.popup = crate::app::Popup::PaddingInput;
+        }
         // keybind help — multiple bindings to cover terminal differences
         KeyCode::Char('/') if ctrl => {
             app.keybind_help_state.reset();
@@ -253,6 +255,16 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.cursor.move_to(new_line, new_col, shift);
             }
         }
+        KeyCode::Home if ctrl => {
+            app.cursor.move_to(0, 0, shift);
+            app.cursor.update_desired_col();
+        }
+        KeyCode::End if ctrl => {
+            let last = app.buffer.line_count().saturating_sub(1);
+            let col = app.buffer.line_len(last);
+            app.cursor.move_to(last, col, shift);
+            app.cursor.update_desired_col();
+        }
         KeyCode::Home => {
             app.cursor.move_to(app.cursor.pos.line, 0, shift);
             app.cursor.update_desired_col();
@@ -260,6 +272,16 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::End => {
             let len = app.buffer.line_len(app.cursor.pos.line);
             app.cursor.move_to(app.cursor.pos.line, len, shift);
+            app.cursor.update_desired_col();
+        }
+        KeyCode::PageUp => {
+            let new_line = find_prev_paragraph(app);
+            app.cursor.move_to(new_line, 0, shift);
+            app.cursor.update_desired_col();
+        }
+        KeyCode::PageDown => {
+            let new_line = find_next_paragraph(app);
+            app.cursor.move_to(new_line, 0, shift);
             app.cursor.update_desired_col();
         }
 

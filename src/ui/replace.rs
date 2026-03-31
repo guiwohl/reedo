@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer as RatBuffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::Widget;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -115,6 +115,7 @@ impl ReplaceState {
 
 pub struct ReplaceBar<'a> {
     pub state: &'a ReplaceState,
+    pub theme: &'a crate::config::theme::Theme,
 }
 
 impl<'a> Widget for ReplaceBar<'a> {
@@ -122,10 +123,10 @@ impl<'a> Widget for ReplaceBar<'a> {
         if area.height < 2 {
             return;
         }
-        let bg = Color::Rgb(30, 30, 46);
-        let fg = Color::Rgb(192, 202, 245);
-        let accent = Color::Rgb(137, 180, 250);
-        let active_bg = Color::Rgb(45, 45, 65);
+        let bg = self.theme.statusbar_bg();
+        let fg = self.theme.fg();
+        let accent = self.theme.popup_accent();
+        let active_bg = self.theme.popup_selected();
 
         for row in 0..2u16.min(area.height) {
             for x in area.x..area.x + area.width {

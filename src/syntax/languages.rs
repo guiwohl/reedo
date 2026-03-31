@@ -69,12 +69,8 @@ pub fn all_languages() -> Vec<LangConfig> {
             highlight_query: JSON_HIGHLIGHTS,
             extensions: &["json"],
         },
-        LangConfig {
-            name: "markdown",
-            language: tree_sitter_md::LANGUAGE.into(),
-            highlight_query: MD_HIGHLIGHTS,
-            extensions: &["md", "markdown"],
-        },
+        // markdown uses custom highlighter in highlight.rs, not tree-sitter
+        // tree-sitter-md triggers C-level assertion crashes on some content
         LangConfig {
             name: "go",
             language: tree_sitter_go::LANGUAGE.into(),
@@ -271,16 +267,6 @@ const JSON_HIGHLIGHTS: &str = r##"
 (pair key: (string) @property)
 "##;
 
-const MD_HIGHLIGHTS: &str = r##"
-(atx_heading) @keyword
-(setext_heading) @keyword
-(link_destination) @string
-(link_text) @property
-(code_span) @string
-(fenced_code_block) @string
-(block_quote) @comment
-"##;
-
 const GO_HIGHLIGHTS: &str = r##"
 (comment) @comment
 (interpreted_string_literal) @string
@@ -306,10 +292,6 @@ const TOML_HIGHLIGHTS: &str = r##"
 (integer) @number
 (float) @number
 (boolean) @constant
-(bare_key) @property
-(quoted_key) @property
-(table_array_element) @keyword
-(table) @keyword
 "##;
 
 const YAML_HIGHLIGHTS: &str = r##"

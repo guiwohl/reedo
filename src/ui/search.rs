@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer as RatBuffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::Widget;
 
 #[derive(Debug, Clone, Default)]
@@ -72,13 +72,14 @@ impl SearchState {
 
 pub struct SearchBar<'a> {
     pub state: &'a SearchState,
+    pub theme: &'a crate::config::theme::Theme,
 }
 
 impl<'a> Widget for SearchBar<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let bg = Color::Rgb(30, 30, 46);
-        let fg = Color::Rgb(192, 202, 245);
-        let accent = Color::Rgb(137, 180, 250);
+        let bg = self.theme.statusbar_bg();
+        let fg = self.theme.fg();
+        let accent = self.theme.popup_accent();
 
         // fill background
         for x in area.x..area.x + area.width {
