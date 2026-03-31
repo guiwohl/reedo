@@ -47,7 +47,11 @@ Some settings can be changed without restarting kilo:
 
 | Setting | How |
 |---|---|
-| Theme | Ctrl+T (theme switcher) |
-| Horizontal padding | Ctrl+] (type a number, Enter) |
+| Theme | Ctrl+T (theme switcher) — persists to config file |
+| Horizontal padding | F2 or Ctrl+] (type a number, Enter) |
 
 Other settings require restarting kilo after editing the config file.
+
+## External File Reload
+
+If the currently open file is modified outside kilo (e.g. by git, another editor), kilo detects the change every ~1 second and reloads automatically. If the buffer has unsaved local edits, the external change is skipped to avoid data loss. A flash notification confirms the reload.

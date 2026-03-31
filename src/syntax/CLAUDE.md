@@ -7,7 +7,7 @@ Tree-sitter integration and custom highlighters.
 | File | Purpose |
 |---|---|
 | `highlight.rs` | Highlighter engine. Manages parser, query, style computation. Also contains .env and markdown highlighters. |
-| `languages.rs` | All 18 language configs (grammar + highlight query + extensions). |
+| `languages.rs` | All 17 tree-sitter language configs (grammar + highlight query + extensions). |
 
 ## How Highlighting Works
 
@@ -20,6 +20,7 @@ Tree-sitter integration and custom highlighters.
 ## Gotchas
 
 - Queries must only use named node types like `(comment) @comment`. String literal patterns like `"fn" @keyword` break across grammar versions with "Invalid node type" errors.
-- Markdown uses a completely separate path — `markdown_style_for_line()` operates on `&[char]` (not `&str`) to avoid byte-index panics on multi-byte UTF-8 characters like `—`.
+- Markdown uses a completely separate path — `markdown_style_for_line()` operates on `&[char]` (not `&str`) to avoid byte-index panics on multi-byte UTF-8 characters like `—`. `tree-sitter-md` was removed due to C assertion crashes.
+- `compute_styles()` wraps tree-sitter query iteration in `catch_unwind` to protect against C assertion failures in grammars. On panic, highlighting silently falls back to plain text.
 - `compute_code_block_lines()` precomputes which lines are inside fenced code blocks in one O(n) pass. This is called once per frame to avoid O(n^2) in the render loop.
 - The `capture_name_to_style()` function takes `ThemeColors` — syntax colors come from the active theme.

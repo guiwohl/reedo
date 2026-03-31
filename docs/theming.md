@@ -71,4 +71,4 @@ All values are hex RGB strings. Every field has a default so you can override ju
 
 Shows all bundled + custom themes. Each entry has color preview dots showing the theme's keyword/string/function/type/number/comment colors. Arrow keys to navigate, Enter to apply.
 
-The theme is applied instantly — syntax highlighting colors update in real time.
+The theme is applied instantly — syntax highlighting colors update in real time. The selected theme is persisted to `kilo.conf.toml` via `Settings::update_theme()`, so it survives restarts.

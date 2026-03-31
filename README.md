@@ -19,14 +19,17 @@ kilo src/main.rs        # open with project context
 ## Features
 
 - **Vim-inspired modes** — Normal and Insert, no complexity
-- **Tree-sitter syntax highlighting** — Rust, Python, JS, TS, HTML, CSS, C, Bash, PHP, JSON, Markdown
-- **File explorer** (Ctrl+E) — tree view with nerd font icons, git indicators, folder colors, CRUD operations, move files across folders
+- **Syntax highlighting** — 17 languages via tree-sitter + custom markdown highlighter
+- **Mouse support** — click to place cursor, drag to select, scroll wheel navigation
+- **File explorer** (Ctrl+E) — tree view with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo (Ctrl+Z)
 - **Fuzzy file finder** (Ctrl+P) — type to search, instant open
 - **Search & replace** — in-file (Ctrl+F / Ctrl+H) and project-wide (Ctrl+Shift+F / Ctrl+Shift+H) with one-by-one approval
 - **8 bundled themes** — kilo-dark, kilo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
-- **Theme switcher** (Ctrl+T) — live preview with color dots
+- **Theme switcher** (Ctrl+T) — live preview with color dots, persists to config
 - **Custom themes** — drop a `.toml` in `~/.config/kilo/themes/`
 - **Git integration** — branch, changed/staged/ahead/behind in statusbar, file status in tree, gutter marks for additions/modifications/deletions
+- **Flash notifications** — transient status messages (save, reload, theme switch) in the statusbar
+- **External file reload** — detects changes made outside the editor and reloads automatically
 - **Auto-close brackets** — `()` `[]` `{}` `<>` `""` `''` ` `` `
 - **Smart indent** — auto-indent after `{`, `(`, `[`, `:`
 - **Autosave** — debounced, 500ms after last edit
@@ -51,8 +54,13 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 | Arrow keys | Move cursor |
 | Ctrl+Left/Right | Jump words |
 | Ctrl+Alt+Up/Down | Jump paragraphs |
+| PgUp / PgDn | Jump paragraphs |
+| Ctrl+Home / Ctrl+End | Top / bottom of file |
 | Shift+Arrows | Select text |
 | Home / End | Start / end of line |
+| Mouse click | Place cursor |
+| Mouse drag | Select text |
+| Scroll wheel | Scroll up/down |
 
 ### Normal Mode
 
@@ -74,7 +82,8 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 | Ctrl+H | Find & replace |
 | Ctrl+Shift+F | Project search |
 | Ctrl+Shift+H | Project replace |
-| Ctrl+T | Switch theme |
+| Ctrl+T | Switch theme (persists to config) |
+| F2 | Set horizontal padding |
 | Ctrl+, | Open config |
 | Ctrl+S | Save |
 | Ctrl+Z / Ctrl+Y | Undo / redo |
@@ -89,6 +98,7 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 | `r` | Rename |
 | `d` | Delete |
 | `m` | Mark for move, then navigate to a folder and press Enter |
+| Ctrl+Z | Undo last filesystem operation |
 
 ## Config
 
@@ -132,10 +142,10 @@ property = "#73bac2"
 
 | Crate | Purpose |
 |---|---|
-| crossterm | Terminal I/O |
+| crossterm | Terminal I/O + mouse events |
 | ratatui | TUI rendering |
 | ropey | Rope-based text buffer |
-| tree-sitter | Syntax highlighting |
+| tree-sitter + 17 grammars | Syntax highlighting |
 | arboard | System clipboard |
 | serde + toml | Config |
 | ignore | File walking |

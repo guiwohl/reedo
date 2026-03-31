@@ -1,6 +1,6 @@
 # Syntax Highlighting
 
-## Supported Languages (18)
+## Supported Languages (17 tree-sitter + custom highlighters)
 
 | Language | Extensions | Engine |
 |---|---|---|
@@ -23,6 +23,8 @@
 | Makefile | `Makefile`, `makefile`, `.mk` | tree-sitter |
 | Markdown | `.md`, `.markdown` | custom (char-based) |
 
+`tree-sitter-md` was removed due to C assertion crashes. Markdown now uses a fully custom char-based highlighter.
+
 ## Special Files
 
 | File | Highlighting |
@@ -37,6 +39,8 @@
 - **Markdown**: uses a custom char-based highlighter instead of tree-sitter. Handles headings, code blocks, inline code, bold, links, blockquotes, lists, horizontal rules. Code block state is precomputed per frame to avoid O(n^2).
 
 - **Reparsing**: after every edit, the buffer is reparsed on the next render frame. Tree-sitter's incremental parsing makes this fast.
+
+- **Safety**: `compute_styles()` wraps tree-sitter query iteration in `catch_unwind` to protect against C assertion failures in grammar code. On panic, highlighting silently degrades to plain text for that parse.
 
 ## Adding a Language
 

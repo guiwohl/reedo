@@ -7,7 +7,7 @@ All visual components. Each popup/widget is a self-contained file with a state s
 | File | Purpose |
 |---|---|
 | `render.rs` | Main editor viewport. Renders git gutter → line numbers → syntax-highlighted text → cursor. Uses theme colors. Markdown has its own highlighting path. |
-| `statusbar.rs` | Bottom bar: mode badge, line/total, git info, filename. Colors from theme. |
+| `statusbar.rs` | Bottom bar: mode badge, line/total, git info, filename, flash notification rendering (right-aligned, 2.5s fadeout). Colors from theme. |
 | `tree.rs` | File explorer popup. TreeState holds entries, selection, open dirs, move state. TreeEntry has path, icon, color, git status. Renders with nerd font icons. Root entry at index 0 = project root title. |
 | `search.rs` | In-file search (Ctrl+F). Floating bar, live match highlighting, Enter/Shift+Enter navigation. |
 | `replace.rs` | In-file find & replace (Ctrl+H). Two-line bar, Tab to switch fields, y/n/a for approval. |
@@ -33,4 +33,5 @@ Every popup follows the same pattern:
 
 - Tree root entry is at index 0. The render skips it and uses it as the title row. `scroll_offset + i + 1` to map visible row to entry index.
 - Markdown highlighting is in `syntax/highlight.rs`, not here — but the render.rs code has a special `is_md` branch that calls it.
-- The padding input popup (Ctrl+]) is rendered inline in main.rs as a `Paragraph` widget, not a separate file.
+- The padding input popup (F2 / Ctrl+]) is rendered inline in main.rs as a `Paragraph` widget, not a separate file.
+- Mouse events (click, drag, scroll) are handled by `handle_mouse()` in main.rs — routes to editor cursor, tree selection, or popup scroll depending on context.

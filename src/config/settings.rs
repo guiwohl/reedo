@@ -92,6 +92,36 @@ impl Settings {
         settings
     }
 
+    pub fn update_theme(name: &str) {
+        let path = Self::config_path();
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            // replace existing theme line or append it
+            let mut found = false;
+            let new_content: String = content
+                .lines()
+                .map(|line| {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("theme") || trimmed.starts_with("# theme") {
+                        found = true;
+                        format!("theme = \"{}\"", name)
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let final_content = if found {
+                new_content
+            } else {
+                format!("{}\ntheme = \"{}\"", content.trim_end(), name)
+            };
+            let _ = std::fs::write(&path, final_content);
+        } else {
+            // no config file — create one with just the theme
+            let _ = std::fs::write(&path, format!("theme = \"{}\"\n", name));
+        }
+    }
+
     fn save_default(&self) {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {

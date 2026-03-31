@@ -14,6 +14,8 @@
 | Arrow keys | Move cursor |
 | Ctrl+Left/Right | Jump words |
 | Ctrl+Alt+Up/Down | Jump paragraphs |
+| PgUp / PgDn | Jump paragraphs |
+| Ctrl+Home / Ctrl+End | Top / bottom of file |
 | Home / End | Start / end of line |
 | Shift+Arrows | Select text |
 | Ctrl+Shift+Left/Right | Select words |
@@ -83,8 +85,8 @@
 |---|---|
 | Ctrl+E | Toggle file explorer |
 | Ctrl+P | Fuzzy file finder |
-| Ctrl+T | Switch theme |
-| Ctrl+] | Set horizontal padding |
+| Ctrl+T | Switch theme (persists to config) |
+| F2 / Ctrl+] | Set horizontal padding |
 | Ctrl+, | Open config file |
 | Ctrl+S | Save file |
 | Ctrl+Q | Quit |
@@ -133,3 +135,12 @@ Title row = project root. Moving an item there sends it to root.
 | Auto-save | 500ms after last edit (debounced) |
 | Smart indent | After `{` `(` `[` `:` |
 | Overtype | Typing `)` `]` `}` skips existing closing bracket |
+
+## Mouse
+
+| Action | Effect |
+|---|---|
+| Left click (editor) | Place cursor at click position |
+| Left click (file tree) | Select/open entry |
+| Left drag | Select text from click to drag position |
+| Scroll up/down | Scroll editor, file tree, or active popup |

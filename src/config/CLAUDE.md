@@ -24,3 +24,4 @@ Settings and theming system.
 - The `Settings` struct is consumed during `App::new()` — individual values are extracted into App fields, the struct itself is not stored.
 - Theme is stored as `app.theme` and accessed by renderers and the syntax highlighter.
 - The `DEFAULT_CONFIG` constant is a hand-written TOML string with all options commented out — not auto-generated from the struct.
+- `Settings::update_theme(name)` writes the selected theme back to `kilo.conf.toml` — called by the theme switcher (Ctrl+T) so the choice persists across restarts. It replaces the existing `theme = ` line or appends one.

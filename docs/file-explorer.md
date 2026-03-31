@@ -4,10 +4,11 @@ Open with **Ctrl+E**. Toggle to close.
 
 ## Layout
 
-- Title row shows `<folder> - Explorer` (the project root name)
+- Title row shows ` <folder> - Explorer` with a home icon (nf-fa-home)
 - Selecting the title row = selecting the project root (for move operations)
 - Full terminal height, ~35% width, right border
 - Nerd font icons for file types and folders (open/closed)
+- Mouse click to select entries, scroll wheel to navigate
 
 ## Navigation
 
@@ -56,6 +57,10 @@ Open with **Ctrl+E**. Toggle to close.
 ## Git Indicators
 
 Files show their git status character after the name (M, A, D, ?, etc) with color coding.
+
+## Filesystem Undo (Ctrl+Z)
+
+When the file explorer is open, Ctrl+Z undoes the last filesystem operation (create, rename, move, delete). The undo stack is per-session. If the undo stack is empty, Ctrl+Z falls through to buffer undo.
 
 ## State Persistence
 

@@ -16,7 +16,7 @@ Git integration via CLI commands.
 
 ## Refresh
 
-Called every 5 seconds from `app.check_git_refresh()` in the event loop. Updates statusbar info, file tree indicators, and gutter marks.
+Called every 5 seconds from `app.check_git_refresh()` in the event loop. Updates statusbar info, file tree indicators, and gutter marks. Runs on a timer independent of the external file change detection (which checks every ~1s in `app.check_external_changes()`).
 
 ## Gotchas
 

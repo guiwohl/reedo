@@ -12,6 +12,7 @@ use std::time::Duration;
 use clap::Parser;
 use crossterm::cursor::SetCursorStyle;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
+use crossterm::event::MouseEventKind;
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::execute;
 use ratatui::backend::CrosstermBackend;
@@ -98,14 +99,22 @@ fn run_tui(cli: Cli, settings: Settings) -> io::Result<()> {
 
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        crossterm::event::EnableMouseCapture
+    )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     let result = event_loop(&mut terminal, &mut app);
 
     terminal::disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        crossterm::event::DisableMouseCapture,
+        LeaveAlternateScreen
+    )?;
     terminal.show_cursor()?;
 
     result
@@ -275,6 +284,9 @@ fn event_loop(
                     } else {
                         editor::input::handle_key(app, key);
                     }
+                }
+                Event::Mouse(mouse) => {
+                    handle_mouse(app, mouse);
                 }
                 Event::Resize(w, h) => {
                     app.viewport_width = w as usize;
@@ -693,6 +705,8 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                                 app.highlighter.compute_styles(&source);
                             }
                         }
+                        // persist to config
+                        crate::config::settings::Settings::update_theme(&name);
                         app.flash(format!("theme: {}", name));
                     }
                     app.popup = Popup::None;
@@ -736,6 +750,163 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
         }
 
         Popup::None => unreachable!(),
+    }
+}
+
+fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
+    let line_count = app.buffer.line_count();
+    let max_line_num_width = format!("{}", line_count).len().max(3);
+    let has_git_gutter = !app.gutter_marks.is_empty();
+    let git_gutter_width = if has_git_gutter { 1u16 } else { 0 };
+    let gutter_width = git_gutter_width + max_line_num_width as u16 + 1;
+    let h_padding = app.horizontal_padding as u16;
+    let text_area_x = gutter_width + h_padding;
+    let full_width = app.viewport_width as u16;
+    let full_height = app.viewport_height as u16;
+
+    let tree_width = if app.popup == Popup::FileTree {
+        (full_width * 35 / 100).max(30).min(60)
+    } else {
+        0
+    };
+
+    match mouse.kind {
+        MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
+            let click_x = mouse.column;
+            let click_y = mouse.row;
+
+            if app.popup == Popup::FileTree && click_x < tree_width {
+                let entry_idx = click_y as usize + app.tree_state.scroll_offset;
+                if entry_idx < app.tree_state.entries.len() {
+                    app.tree_state.selected = entry_idx;
+                }
+                return;
+            }
+
+            if app.popup == Popup::FuzzyFinder {
+                let popup_width = (full_width * 60 / 100).max(40);
+                let popup_height = (full_height * 60 / 100).max(10);
+                let px = (full_width - popup_width) / 2;
+                let py = (full_height - popup_height) / 4;
+                if click_x >= px && click_x < px + popup_width && click_y >= py + 3 && click_y < py + popup_height {
+                    let clicked_idx = app.fuzzy_state.scroll_offset + (click_y - py - 3) as usize;
+                    if clicked_idx < app.fuzzy_state.filtered.len() {
+                        app.fuzzy_state.selected = clicked_idx;
+                    }
+                }
+                return;
+            }
+
+            if app.popup == Popup::ThemeSwitcher {
+                let popup_width = (full_width * 40 / 100).max(35);
+                let popup_height = (full_height * 50 / 100).max(10);
+                let px = (full_width - popup_width) / 2;
+                let py = (full_height - popup_height) / 4;
+                if click_x >= px && click_x < px + popup_width && click_y >= py + 3 && click_y < py + popup_height {
+                    let clicked_idx = (click_y - py - 3) as usize;
+                    if clicked_idx < app.theme_switcher_state.themes.len() {
+                        app.theme_switcher_state.selected = clicked_idx;
+                    }
+                }
+                return;
+            }
+
+            if app.popup == Popup::SearchProject {
+                let popup_width = (full_width * 70 / 100).max(50);
+                let popup_height = (full_height * 70 / 100).max(15);
+                let px = (full_width - popup_width) / 2;
+                let py = (full_height - popup_height) / 4;
+                if click_x >= px && click_x < px + popup_width && click_y >= py + 3 && click_y < py + popup_height {
+                    let clicked_idx = app.project_search_state.scroll_offset + (click_y - py - 3) as usize;
+                    if clicked_idx < app.project_search_state.results.len() {
+                        app.project_search_state.selected = clicked_idx;
+                    }
+                }
+                return;
+            }
+
+            // editor text area click
+            if click_x >= text_area_x && click_y < full_height.saturating_sub(1) {
+                let file_col = (click_x - text_area_x) as usize + app.viewport_left;
+                let file_line = click_y as usize + app.viewport_top;
+                if file_line < line_count {
+                    let line_len = app.buffer.line_len(file_line);
+                    let col = file_col.min(line_len);
+                    app.cursor.move_to(file_line, col, false);
+                    app.cursor.update_desired_col();
+                }
+            }
+        }
+
+        // drag = text selection
+        MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
+            if app.popup == Popup::None || app.popup == Popup::Search || app.popup == Popup::Replace {
+                let click_x = mouse.column;
+                let click_y = mouse.row;
+                if click_x >= text_area_x && click_y < full_height.saturating_sub(1) {
+                    let file_col = (click_x - text_area_x) as usize + app.viewport_left;
+                    let file_line = click_y as usize + app.viewport_top;
+                    if file_line < line_count {
+                        let line_len = app.buffer.line_len(file_line);
+                        let col = file_col.min(line_len);
+                        app.cursor.move_to(file_line, col, true);
+                    }
+                }
+            }
+        }
+
+        MouseEventKind::ScrollUp => {
+            match app.popup {
+                Popup::FileTree => app.tree_state.move_up(),
+                Popup::FuzzyFinder => app.fuzzy_state.move_up(),
+                Popup::KeybindHelp => app.keybind_help_state.scroll_up(),
+                Popup::ThemeSwitcher => app.theme_switcher_state.move_up(),
+                Popup::SearchProject => app.project_search_state.move_up(),
+                _ => {
+                    if app.viewport_top > 0 {
+                        app.viewport_top = app.viewport_top.saturating_sub(3);
+                        if app.cursor.pos.line >= app.viewport_top + app.viewport_height.saturating_sub(2) {
+                            let new_line = app.viewport_top + app.viewport_height.saturating_sub(3);
+                            let col = app.cursor.desired_col.min(app.buffer.line_len(new_line));
+                            app.cursor.move_to(new_line, col, false);
+                        }
+                    }
+                }
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            match app.popup {
+                Popup::FileTree => {
+                    let visible = app.viewport_height.saturating_sub(2);
+                    app.tree_state.move_down(visible);
+                }
+                Popup::FuzzyFinder => {
+                    let visible = app.viewport_height.saturating_sub(6);
+                    app.fuzzy_state.move_down(visible);
+                }
+                Popup::KeybindHelp => {
+                    let max = crate::ui::keybind_help::KeybindHelpState::total_lines()
+                        .saturating_sub(app.viewport_height.saturating_sub(6));
+                    app.keybind_help_state.scroll_down(max);
+                }
+                Popup::ThemeSwitcher => app.theme_switcher_state.move_down(),
+                Popup::SearchProject => {
+                    let visible = app.viewport_height.saturating_sub(6);
+                    app.project_search_state.move_down(visible);
+                }
+                _ => {
+                    let max_top = line_count.saturating_sub(1);
+                    if app.viewport_top < max_top {
+                        app.viewport_top = (app.viewport_top + 3).min(max_top);
+                        if app.cursor.pos.line < app.viewport_top {
+                            let col = app.cursor.desired_col.min(app.buffer.line_len(app.viewport_top));
+                            app.cursor.move_to(app.viewport_top, col, false);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 }
 

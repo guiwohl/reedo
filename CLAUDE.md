@@ -15,11 +15,11 @@
 
 | Path | Purpose | CLAUDE.md |
 |---|---|---|
-| `main.rs` | Entry point, event loop, popup rendering + input routing | — |
-| `app.rs` | Central App state struct, Popup enum, autosave, git refresh | — |
+| `main.rs` | Entry point, event loop, popup rendering + input routing, mouse handling | — |
+| `app.rs` | Central App state struct, Popup enum, autosave, git refresh, external file change detection, flash notifications | — |
 | `editor/` | Core text editing: buffer, cursor, keybinds, undo, brackets, clipboard | [src/editor/CLAUDE.md](src/editor/CLAUDE.md) |
 | `ui/` | All UI widgets: editor view, statusbar, tree, search, replace, fuzzy, themes, help, welcome | [src/ui/CLAUDE.md](src/ui/CLAUDE.md) |
-| `syntax/` | Tree-sitter highlighting (18 languages) + custom markdown/env highlighters | [src/syntax/CLAUDE.md](src/syntax/CLAUDE.md) |
+| `syntax/` | Tree-sitter highlighting (17 grammars) + custom markdown/env highlighters | [src/syntax/CLAUDE.md](src/syntax/CLAUDE.md) |
 | `config/` | TOML settings + theme system (8 bundled + custom) | [src/config/CLAUDE.md](src/config/CLAUDE.md) |
 | `git/` | Git status, gutter marks, statusbar info via CLI | [src/git/CLAUDE.md](src/git/CLAUDE.md) |
 
@@ -51,7 +51,7 @@
 | `crossterm` | Terminal I/O, raw mode, keyboard events |
 | `ratatui` | TUI widget rendering |
 | `ropey` | Rope data structure for text buffer |
-| `tree-sitter` + 17 grammar crates | AST-based syntax highlighting |
+| `tree-sitter` + 17 grammar crates | AST-based syntax highlighting (no tree-sitter-md) |
 | `arboard` | System clipboard |
 | `serde` + `toml` | Config/theme parsing |
 | `ignore` | File walking (respects .gitignore) |
@@ -81,5 +81,8 @@ See `mvp.md` for the original spec. Critical non-obvious decisions:
 - Status bar left-aligned: `[NORMAL]  42/520  main ~3 +1 ↑2 ↓0`
 - Cursor always yellow (block in normal, bar in insert)
 - Git refreshes every 5 seconds via CLI commands
-- Markdown uses custom char-based highlighter (not tree-sitter)
+- Mouse support: click to place cursor/select tree entries, drag to select text, scroll wheel for navigation
+- Flash notifications: transient statusbar messages for save, reload, theme switch (2.5s)
+- External file reload: detects out-of-process file changes every ~1s, reloads if buffer is clean
+- Markdown uses custom char-based highlighter (tree-sitter-md removed — C assertion crashes)
 - Tree-sitter queries use only named node types (no string literal patterns)
