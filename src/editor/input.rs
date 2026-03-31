@@ -66,6 +66,12 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('s') if ctrl => {
             if let Err(e) = app.buffer.save() {
                 tracing::error!("save failed: {}", e);
+                app.flash("save failed");
+            } else {
+                if let Some(ref p) = app.buffer.file_path {
+                    app.last_file_mtime = std::fs::metadata(p).ok().and_then(|m| m.modified().ok());
+                }
+                app.flash("saved");
             }
         }
 

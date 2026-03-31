@@ -48,6 +48,9 @@ pub struct App {
     pub yank_buffer: Option<String>,
     pub last_edit_time: Option<Instant>,
     pub autosave_delay_ms: u64,
+    pub last_file_mtime: Option<std::time::SystemTime>,
+    pub last_external_check: Instant,
+    pub flash_message: Option<(String, Instant)>,
     pub theme: Theme,
     pub pending_key: Option<char>,
     pub popup: Popup,
@@ -85,6 +88,9 @@ impl App {
             autosave_delay_ms: settings.autosave_delay_ms,
             yank_buffer: None,
             last_edit_time: None,
+            last_file_mtime: None,
+            last_external_check: Instant::now(),
+            flash_message: None,
             theme: loaded_theme,
             pending_key: None,
             popup: Popup::None,
@@ -114,6 +120,7 @@ impl App {
         self.cursor = Cursor::default();
         self.viewport_top = 0;
         self.viewport_left = 0;
+        self.last_file_mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());
 
         // detect and setup syntax highlighting
         if let Some(config) = Highlighter::detect_language(path) {
@@ -133,6 +140,10 @@ impl App {
 
         tracing::info!("opened file: {}", path.display());
         Ok(())
+    }
+
+    pub fn flash(&mut self, msg: impl Into<String>) {
+        self.flash_message = Some((msg.into(), Instant::now()));
     }
 
     pub fn mark_edited(&mut self) {
@@ -157,6 +168,13 @@ impl App {
             {
                 if let Err(e) = self.buffer.save() {
                     tracing::error!("autosave failed: {}", e);
+                    self.flash("save failed");
+                } else {
+                    self.flash("saved");
+                    let path = self.buffer.file_path.clone();
+                    if let Some(p) = path {
+                        self.last_file_mtime = std::fs::metadata(&p).ok().and_then(|m| m.modified().ok());
+                    }
                 }
                 self.last_edit_time = None;
             }
@@ -173,6 +191,75 @@ impl App {
             }
             self.last_git_refresh = Instant::now();
         }
+    }
+
+    pub fn check_external_changes(&mut self) {
+        if self.last_external_check.elapsed().as_secs() < 1 {
+            return;
+        }
+        self.last_external_check = Instant::now();
+
+        let path = match &self.buffer.file_path {
+            Some(p) => p.clone(),
+            None => return,
+        };
+
+        let current_mtime = match std::fs::metadata(&path).ok().and_then(|m| m.modified().ok()) {
+            Some(t) => t,
+            None => return,
+        };
+
+        let changed = match self.last_file_mtime {
+            Some(prev) => current_mtime != prev,
+            None => false,
+        };
+
+        if !changed {
+            return;
+        }
+
+        // file changed on disk
+        if self.buffer.dirty {
+            // local unsaved edits — don't reload, user's work takes priority
+            tracing::info!("file changed externally but buffer is dirty, skipping reload");
+            return;
+        }
+
+        // reload: preserve cursor position as best we can
+        let old_line = self.cursor.pos.line;
+        let old_col = self.cursor.pos.col;
+
+        if let Ok(()) = self.reload_file(&path) {
+            // clamp cursor to new file bounds
+            let max_line = self.buffer.line_count().saturating_sub(1);
+            let new_line = old_line.min(max_line);
+            let new_col = old_col.min(self.buffer.line_len(new_line));
+            self.cursor.move_to(new_line, new_col, false);
+            self.cursor.update_desired_col();
+            self.flash("reloaded — external change");
+            tracing::info!("reloaded file after external change");
+        }
+    }
+
+    fn reload_file(&mut self, path: &std::path::Path) -> std::io::Result<()> {
+        self.buffer = Buffer::from_file(path)?;
+        self.last_file_mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());
+        self.needs_reparse = true;
+
+        // re-detect syntax
+        if let Some(config) = Highlighter::detect_language(path) {
+            self.highlighter.set_language(&config, &self.theme.colors);
+            let source = self.buffer.rope.to_string();
+            self.highlighter.parse(&source);
+            self.highlighter.compute_styles(&source);
+        }
+
+        // refresh gutter marks
+        if let Some(ref root) = self.project_root {
+            self.gutter_marks = GitInfo::diff_for_file(root, path);
+        }
+
+        Ok(())
     }
 
     pub fn scroll_to_cursor(&mut self) {

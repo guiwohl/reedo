@@ -89,5 +89,29 @@ impl<'a> Widget for StatusBar<'a> {
             });
             x += 1;
         }
+
+        // flash message — right-aligned, visible for 2.5s
+        if let Some((ref msg, ref when)) = self.app.flash_message {
+            let elapsed = when.elapsed().as_millis();
+            if elapsed < 2500 {
+                let flash_fg = if elapsed < 2000 {
+                    Color::Rgb(166, 227, 161) // green
+                } else {
+                    // fade to dim in last 500ms
+                    Color::Rgb(86, 95, 137)
+                };
+                let display = format!(" {} ", msg);
+                let start_x = area.x + area.width - display.len() as u16;
+                let mut fx = start_x;
+                for ch in display.chars() {
+                    if fx >= area.x + area.width { break; }
+                    buf.cell_mut((fx, area.y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(flash_fg).bg(bg));
+                    });
+                    fx += 1;
+                }
+            }
+        }
     }
 }

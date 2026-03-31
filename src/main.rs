@@ -286,6 +286,7 @@ fn event_loop(
 
         app.check_autosave();
         app.check_git_refresh();
+        app.check_external_changes();
 
         if !app.running {
             break;
@@ -322,6 +323,10 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             KeyCode::Char(ch) if !ctrl => {
                 app.search_state.insert_char(ch);
                 app.search_state.find_matches(&app.buffer);
+                let count = app.search_state.matches.len();
+                if count > 0 {
+                    app.flash(format!("{} matches", count));
+                }
                 if let Some((line, col)) = app.search_state.current_pos() {
                     app.cursor.move_to(line, col, false);
                     app.cursor.update_desired_col();
@@ -444,24 +449,36 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         match app.tree_state.action {
                             TreeAction::NewFile => {
                                 if let Some(new_path) = app.tree_state.confirm_new_file() {
+                                    let name = new_path.file_name().unwrap_or_default().to_string_lossy().to_string();
                                     let _ = app.open_file(&new_path);
+                                    app.flash(format!("created {}", name));
                                     app.popup = Popup::None;
                                 }
                             }
                             TreeAction::NewFolder => {
-                                app.tree_state.confirm_new_folder();
+                                if let Some(p) = app.tree_state.confirm_new_folder() {
+                                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                    app.flash(format!("created {}/", name));
+                                }
                             }
                             TreeAction::Rename => {
-                                app.tree_state.confirm_rename();
+                                if let Some(p) = app.tree_state.confirm_rename() {
+                                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                    app.flash(format!("renamed to {}", name));
+                                }
                             }
                             TreeAction::Delete => {
-                                app.tree_state.confirm_delete();
+                                if app.tree_state.confirm_delete() {
+                                    app.flash("deleted");
+                                }
                             }
                             TreeAction::None => {}
                         }
                     }
                     KeyCode::Char('y') if app.tree_state.action == TreeAction::Delete => {
-                        app.tree_state.confirm_delete();
+                        if app.tree_state.confirm_delete() {
+                            app.flash("deleted");
+                        }
                     }
                     KeyCode::Char('n') if app.tree_state.action == TreeAction::Delete => {
                         app.tree_state.cancel_action();
@@ -503,7 +520,10 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                     if app.tree_state.marked_for_move.is_some() {
                         if let Some(entry) = app.tree_state.selected_entry() {
                             if entry.is_dir {
-                                app.tree_state.confirm_move();
+                                if let Some(p) = app.tree_state.confirm_move() {
+                                    let dest = p.parent().unwrap_or(std::path::Path::new(".")).file_name().unwrap_or_default().to_string_lossy();
+                                    app.flash(format!("moved to {}/", dest));
+                                }
                             }
                         }
                     } else if let Some(entry) = app.tree_state.selected_entry() {
@@ -661,8 +681,8 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                 KeyCode::Down => app.theme_switcher_state.move_down(),
                 KeyCode::Enter => {
                     if let Some(selected) = app.theme_switcher_state.selected_theme().cloned() {
+                        let name = selected.name.clone();
                         app.theme = selected;
-                        // re-apply highlight colors with new theme
                         if app.highlighter.is_active() {
                             if let Some(config) = crate::syntax::highlight::Highlighter::detect_language(
                                 app.buffer.file_path.as_deref().unwrap_or(std::path::Path::new("")),
@@ -673,6 +693,7 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                                 app.highlighter.compute_styles(&source);
                             }
                         }
+                        app.flash(format!("theme: {}", name));
                     }
                     app.popup = Popup::None;
                 }
