@@ -70,19 +70,45 @@ impl<'a> Widget for EditorView<'a> {
             Vec::new()
         };
 
-        for row in 0..viewport_height {
-            let file_line = self.app.viewport_top + row;
+        let wrap_enabled = self.app.horizontal_padding > 1;
+        let tw = text_area_width as usize;
+
+        // build screen rows: Vec<(file_line, char_offset)>
+        // each entry = one screen row showing file_line starting at char_offset
+        let mut screen_rows: Vec<(usize, usize)> = Vec::new();
+        let mut file_line = self.app.viewport_top;
+        while screen_rows.len() < viewport_height && file_line < line_count {
+            let line_len = self.app.buffer.line_text(file_line).chars().count();
+            if wrap_enabled && tw > 0 && line_len > tw {
+                let mut offset = 0;
+                while offset < line_len && screen_rows.len() < viewport_height {
+                    screen_rows.push((file_line, offset));
+                    offset += tw;
+                }
+            } else {
+                screen_rows.push((file_line, 0));
+            }
+            file_line += 1;
+        }
+        // fill remaining rows with empty
+        while screen_rows.len() < viewport_height {
+            screen_rows.push((usize::MAX, 0));
+        }
+
+        for (row, &(file_line, char_offset)) in screen_rows.iter().enumerate() {
             let y = area.y + row as u16;
 
             if file_line < line_count {
-                // git gutter mark
-                if has_git_gutter {
+                let is_first_wrap = char_offset == 0;
+
+                // git gutter mark (only on first wrap row)
+                if has_git_gutter && is_first_wrap {
                     let mark_x = area.x;
                     if let Some(mark) = self.app.gutter_marks.get(&file_line) {
                         let (ch, color) = match mark {
-                            GutterMark::Added => ('│', Color::Rgb(166, 227, 161)),    // green
-                            GutterMark::Modified => ('│', Color::Rgb(249, 226, 175)), // yellow
-                            GutterMark::Deleted => ('▸', Color::Rgb(247, 118, 142)),  // red
+                            GutterMark::Added => ('│', Color::Rgb(166, 227, 161)),
+                            GutterMark::Modified => ('│', Color::Rgb(249, 226, 175)),
+                            GutterMark::Deleted => ('▸', Color::Rgb(247, 118, 142)),
                         };
                         buf.cell_mut((mark_x, y)).map(|cell| {
                             cell.set_char(ch);
@@ -91,26 +117,28 @@ impl<'a> Widget for EditorView<'a> {
                     }
                 }
 
-                // line number
-                let num_str = format!(
-                    "{:>width$} ",
-                    file_line + 1,
-                    width = max_line_num_width
-                );
-                let gutter_style = Style::default().fg(theme_gutter);
-                for (i, ch) in num_str.chars().enumerate() {
-                    let x = area.x + git_gutter_width + i as u16;
-                    if x < area.x + area.width {
-                        buf.cell_mut((x, y)).map(|cell| {
-                            cell.set_char(ch);
-                            cell.set_style(gutter_style);
-                        });
+                // line number (only on first wrap row, continuation rows get blank gutter)
+                if is_first_wrap {
+                    let num_str = format!(
+                        "{:>width$} ",
+                        file_line + 1,
+                        width = max_line_num_width
+                    );
+                    let gutter_style = Style::default().fg(theme_gutter);
+                    for (i, ch) in num_str.chars().enumerate() {
+                        let x = area.x + git_gutter_width + i as u16;
+                        if x < area.x + area.width {
+                            buf.cell_mut((x, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(gutter_style);
+                            });
+                        }
                     }
                 }
 
-                // text content with syntax highlighting
+                // text content
                 let line_text = self.app.buffer.line_text(file_line);
-                let scroll_col = self.app.viewport_left;
+                let scroll_col = if wrap_enabled { char_offset } else { self.app.viewport_left };
                 let visible_chars: Vec<char> = line_text.chars().skip(scroll_col).collect();
 
                 for (i, &ch) in visible_chars.iter().enumerate() {
@@ -175,21 +203,29 @@ impl<'a> Widget for EditorView<'a> {
             }
         }
 
-        // cursor
-        let cursor_screen_line = self
-            .app
-            .cursor
-            .pos
-            .line
-            .saturating_sub(self.app.viewport_top);
-        let cursor_screen_col = self
-            .app
-            .cursor
-            .pos
-            .col
-            .saturating_sub(self.app.viewport_left);
-        let cursor_y = area.y + cursor_screen_line as u16;
-        let cursor_x = text_area_x + cursor_screen_col as u16;
+        // cursor — find which screen row contains the cursor
+        let cursor_line = self.app.cursor.pos.line;
+        let cursor_col = self.app.cursor.pos.col;
+        let mut cursor_y = area.y;
+        let mut cursor_x = text_area_x;
+        for (row, &(fl, co)) in screen_rows.iter().enumerate() {
+            if fl == cursor_line {
+                let col_in_row = if wrap_enabled {
+                    if cursor_col >= co && cursor_col < co + tw {
+                        Some(cursor_col - co)
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(cursor_col.saturating_sub(self.app.viewport_left))
+                };
+                if let Some(c) = col_in_row {
+                    cursor_y = area.y + row as u16;
+                    cursor_x = text_area_x + c as u16;
+                    break;
+                }
+            }
+        }
 
         if cursor_y < area.y + area.height && cursor_x < area.x + area.width {
             match self.app.mode {
