@@ -104,7 +104,9 @@ impl<'a> Widget for StatusBar<'a> {
                 let start_x = area.x + area.width - display.len() as u16;
                 let mut fx = start_x;
                 for ch in display.chars() {
-                    if fx >= area.x + area.width { break; }
+                    if fx >= area.x + area.width {
+                        break;
+                    }
                     buf.cell_mut((fx, area.y)).map(|cell| {
                         cell.set_char(ch);
                         cell.set_style(Style::default().fg(flash_fg).bg(bg));

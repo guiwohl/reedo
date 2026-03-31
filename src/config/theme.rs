@@ -36,22 +36,54 @@ pub struct ThemeColors {
     pub property: String,
 }
 
-fn default_bg() -> String { "#1a1b26".into() }
-fn default_fg() -> String { "#c0caf5".into() }
-fn default_gutter() -> String { "#3b4261".into() }
-fn default_cursor_bg() -> String { "#c0caf5".into() }
-fn default_cursor_fg() -> String { "#1a1b26".into() }
-fn default_selection() -> String { "#283457".into() }
-fn default_statusbar_bg() -> String { "#1e1e2e".into() }
-fn default_statusbar_fg() -> String { "#a6adc8".into() }
-fn default_keyword() -> String { "#bb9af7".into() }
-fn default_string() -> String { "#9ece6a".into() }
-fn default_comment() -> String { "#565f89".into() }
-fn default_function() -> String { "#7daeF7".into() }
-fn default_type_color() -> String { "#2ac3de".into() }
-fn default_number() -> String { "#ff9e64".into() }
-fn default_operator() -> String { "#89ddff".into() }
-fn default_property() -> String { "#73bac2".into() }
+fn default_bg() -> String {
+    "#1a1b26".into()
+}
+fn default_fg() -> String {
+    "#c0caf5".into()
+}
+fn default_gutter() -> String {
+    "#3b4261".into()
+}
+fn default_cursor_bg() -> String {
+    "#c0caf5".into()
+}
+fn default_cursor_fg() -> String {
+    "#1a1b26".into()
+}
+fn default_selection() -> String {
+    "#283457".into()
+}
+fn default_statusbar_bg() -> String {
+    "#1e1e2e".into()
+}
+fn default_statusbar_fg() -> String {
+    "#a6adc8".into()
+}
+fn default_keyword() -> String {
+    "#bb9af7".into()
+}
+fn default_string() -> String {
+    "#9ece6a".into()
+}
+fn default_comment() -> String {
+    "#565f89".into()
+}
+fn default_function() -> String {
+    "#7daeF7".into()
+}
+fn default_type_color() -> String {
+    "#2ac3de".into()
+}
+fn default_number() -> String {
+    "#ff9e64".into()
+}
+fn default_operator() -> String {
+    "#89ddff".into()
+}
+fn default_property() -> String {
+    "#73bac2".into()
+}
 
 impl Default for ThemeColors {
     fn default() -> Self {
@@ -92,26 +124,40 @@ impl Default for Theme {
 }
 
 impl Theme {
-    pub fn bg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.bg) }
-    pub fn fg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.fg) }
-    pub fn gutter(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.gutter) }
-    pub fn selection(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.selection) }
-    pub fn statusbar_bg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.statusbar_bg) }
-    pub fn statusbar_fg(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.statusbar_fg) }
-    pub fn comment(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.comment) }
-    pub fn function(&self) -> ratatui::style::Color { parse_hex_color(&self.colors.function) }
+    pub fn bg(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.bg)
+    }
+    pub fn fg(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.fg)
+    }
+    pub fn gutter(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.gutter)
+    }
+    pub fn selection(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.selection)
+    }
+    pub fn statusbar_bg(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.statusbar_bg)
+    }
+    pub fn statusbar_fg(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.statusbar_fg)
+    }
+    pub fn comment(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.comment)
+    }
+    pub fn function(&self) -> ratatui::style::Color {
+        parse_hex_color(&self.colors.function)
+    }
 
     pub fn popup_bg(&self) -> ratatui::style::Color {
         // slightly lighter/darker than main bg for contrast
         let c = parse_hex_color(&self.colors.bg);
         match c {
-            ratatui::style::Color::Rgb(r, g, b) => {
-                ratatui::style::Color::Rgb(
-                    r.saturating_add(8),
-                    g.saturating_add(8),
-                    b.saturating_add(8),
-                )
-            }
+            ratatui::style::Color::Rgb(r, g, b) => ratatui::style::Color::Rgb(
+                r.saturating_add(8),
+                g.saturating_add(8),
+                b.saturating_add(8),
+            ),
             _ => c,
         }
     }

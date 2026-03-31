@@ -99,10 +99,17 @@ impl<'a> Widget for ThemeSwitcherWidget<'a> {
             let title = " Switch Theme ";
             let mut x = area.x + 2;
             for ch in title.chars() {
-                if x >= area.x + area.width { break; }
+                if x >= area.x + area.width {
+                    break;
+                }
                 buf.cell_mut((x, area.y + 1)).map(|cell| {
                     cell.set_char(ch);
-                    cell.set_style(Style::default().fg(accent).bg(bg).add_modifier(Modifier::BOLD));
+                    cell.set_style(
+                        Style::default()
+                            .fg(accent)
+                            .bg(bg)
+                            .add_modifier(Modifier::BOLD),
+                    );
                 });
                 x += 1;
             }
@@ -121,7 +128,9 @@ impl<'a> Widget for ThemeSwitcherWidget<'a> {
         // theme list
         for (i, theme) in self.state.themes.iter().enumerate() {
             let y = area.y + 3 + i as u16;
-            if y >= area.y + area.height { break; }
+            if y >= area.y + area.height {
+                break;
+            }
 
             let is_selected = i == self.state.selected;
             let line_bg = if is_selected { selected_bg } else { bg };
@@ -145,9 +154,14 @@ impl<'a> Widget for ThemeSwitcherWidget<'a> {
             let display = format!("  {} ", theme.name);
             let mut x = area.x;
             for ch in display.chars() {
-                if x >= area.x + area.width { break; }
+                if x >= area.x + area.width {
+                    break;
+                }
                 let style = if is_selected {
-                    Style::default().fg(accent).bg(line_bg).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(accent)
+                        .bg(line_bg)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(fg).bg(line_bg)
                 };
@@ -160,10 +174,16 @@ impl<'a> Widget for ThemeSwitcherWidget<'a> {
 
             // color dots after the name
             for color_hex in &preview_colors {
-                if x >= area.x + area.width { break; }
+                if x >= area.x + area.width {
+                    break;
+                }
                 buf.cell_mut((x, y)).map(|cell| {
                     cell.set_char('●');
-                    cell.set_style(Style::default().fg(theme::parse_hex_color(color_hex)).bg(line_bg));
+                    cell.set_style(
+                        Style::default()
+                            .fg(theme::parse_hex_color(color_hex))
+                            .bg(line_bg),
+                    );
                 });
                 x += 1;
             }

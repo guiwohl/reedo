@@ -60,11 +60,7 @@ impl FuzzyState {
         self.scroll_offset = 0;
 
         if self.query.is_empty() {
-            self.filtered = self
-                .all_files
-                .iter()
-                .map(|p| (p.clone(), 0))
-                .collect();
+            self.filtered = self.all_files.iter().map(|p| (p.clone(), 0)).collect();
             return;
         }
 
@@ -250,7 +246,10 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
                     if parent_str.is_empty() {
                         (String::new(), path_str.to_string())
                     } else {
-                        (format!("{}/", parent_str), path.file_name().unwrap().to_string_lossy().to_string())
+                        (
+                            format!("{}/", parent_str),
+                            path.file_name().unwrap().to_string_lossy().to_string(),
+                        )
                     }
                 } else {
                     (String::new(), path_str.to_string())

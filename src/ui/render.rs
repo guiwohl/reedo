@@ -39,9 +39,7 @@ impl<'a> Widget for EditorView<'a> {
         let h_padding = self.app.horizontal_padding as u16;
 
         let text_area_x = area.x + gutter_width + h_padding;
-        let text_area_width = area
-            .width
-            .saturating_sub(gutter_width + h_padding * 2);
+        let text_area_width = area.width.saturating_sub(gutter_width + h_padding * 2);
 
         let viewport_height = area.height as usize;
 
@@ -119,11 +117,7 @@ impl<'a> Widget for EditorView<'a> {
 
                 // line number (only on first wrap row, continuation rows get blank gutter)
                 if is_first_wrap {
-                    let num_str = format!(
-                        "{:>width$} ",
-                        file_line + 1,
-                        width = max_line_num_width
-                    );
+                    let num_str = format!("{:>width$} ", file_line + 1, width = max_line_num_width);
                     let gutter_style = Style::default().fg(theme_gutter);
                     for (i, ch) in num_str.chars().enumerate() {
                         let x = area.x + git_gutter_width + i as u16;
@@ -138,7 +132,11 @@ impl<'a> Widget for EditorView<'a> {
 
                 // text content
                 let line_text = self.app.buffer.line_text(file_line);
-                let scroll_col = if wrap_enabled { char_offset } else { self.app.viewport_left };
+                let scroll_col = if wrap_enabled {
+                    char_offset
+                } else {
+                    self.app.viewport_left
+                };
                 let visible_chars: Vec<char> = line_text.chars().skip(scroll_col).collect();
 
                 for (i, &ch) in visible_chars.iter().enumerate() {
@@ -152,7 +150,9 @@ impl<'a> Widget for EditorView<'a> {
                     let mut style = if is_md {
                         let in_code = md_code_lines.get(file_line).copied().unwrap_or(false);
                         let line_chars: Vec<char> = line_text.chars().collect();
-                        if let Some(hs) = highlight::markdown_style_for_line(&line_chars, file_col, in_code) {
+                        if let Some(hs) =
+                            highlight::markdown_style_for_line(&line_chars, file_col, in_code)
+                        {
                             hs.to_ratatui_style()
                         } else {
                             Style::default().fg(theme_fg)

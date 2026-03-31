@@ -117,13 +117,41 @@ fn is_binary(path: &Path) -> bool {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     matches!(
         ext,
-        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp"
-            | "mp3" | "mp4" | "avi" | "mov" | "mkv"
-            | "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar"
-            | "exe" | "dll" | "so" | "dylib" | "o" | "a"
-            | "wasm" | "pdf" | "doc" | "docx"
-            | "ttf" | "otf" | "woff" | "woff2"
-            | "sqlite" | "db"
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "bmp"
+            | "ico"
+            | "webp"
+            | "mp3"
+            | "mp4"
+            | "avi"
+            | "mov"
+            | "mkv"
+            | "zip"
+            | "tar"
+            | "gz"
+            | "bz2"
+            | "xz"
+            | "7z"
+            | "rar"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "o"
+            | "a"
+            | "wasm"
+            | "pdf"
+            | "doc"
+            | "docx"
+            | "ttf"
+            | "otf"
+            | "woff"
+            | "woff2"
+            | "sqlite"
+            | "db"
     )
 }
 
@@ -174,7 +202,10 @@ impl<'a> Widget for ProjectSearchWidget<'a> {
                     break;
                 }
                 let style = if i < label.len() {
-                    Style::default().fg(accent).bg(bg).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(accent)
+                        .bg(bg)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(fg).bg(bg)
                 };

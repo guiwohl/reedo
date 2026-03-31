@@ -52,10 +52,23 @@ pub struct TreeState {
 
 #[derive(Debug, Clone)]
 pub enum FsOperation {
-    Move { from: PathBuf, to: PathBuf },
-    Create { path: PathBuf, is_dir: bool },
-    Delete { path: PathBuf, content: Option<String>, is_dir: bool },
-    Rename { from: PathBuf, to: PathBuf },
+    Move {
+        from: PathBuf,
+        to: PathBuf,
+    },
+    Create {
+        path: PathBuf,
+        is_dir: bool,
+    },
+    Delete {
+        path: PathBuf,
+        content: Option<String>,
+        is_dir: bool,
+    },
+    Rename {
+        from: PathBuf,
+        to: PathBuf,
+    },
 }
 
 impl Default for TreeAction {
@@ -262,7 +275,10 @@ impl TreeState {
             self.cancel_action();
             return None;
         }
-        self.fs_undo_stack.push(FsOperation::Create { path: new_path.clone(), is_dir: false });
+        self.fs_undo_stack.push(FsOperation::Create {
+            path: new_path.clone(),
+            is_dir: false,
+        });
         self.cancel_action();
         if let Some(root) = self.root.clone() {
             self.build(&root);
@@ -278,7 +294,10 @@ impl TreeState {
         let parent = self.selected_dir();
         let new_path = parent.join(&self.input_buf);
         let _ = std::fs::create_dir_all(&new_path);
-        self.fs_undo_stack.push(FsOperation::Create { path: new_path.clone(), is_dir: true });
+        self.fs_undo_stack.push(FsOperation::Create {
+            path: new_path.clone(),
+            is_dir: true,
+        });
         self.open_dirs.insert(new_path.clone());
         self.cancel_action();
         if let Some(root) = self.root.clone() {
@@ -299,7 +318,10 @@ impl TreeState {
                 .unwrap_or(Path::new("."))
                 .join(&self.input_buf);
             if std::fs::rename(&old_path, &new_path).is_ok() {
-                self.fs_undo_stack.push(FsOperation::Rename { from: old_path, to: new_path.clone() });
+                self.fs_undo_stack.push(FsOperation::Rename {
+                    from: old_path,
+                    to: new_path.clone(),
+                });
             }
             self.cancel_action();
             if let Some(root) = self.root.clone() {
@@ -327,7 +349,11 @@ impl TreeState {
                 std::fs::remove_file(&path)
             };
             if result.is_ok() {
-                self.fs_undo_stack.push(FsOperation::Delete { path: path.clone(), content, is_dir });
+                self.fs_undo_stack.push(FsOperation::Delete {
+                    path: path.clone(),
+                    content,
+                    is_dir,
+                });
                 self.cancel_action();
                 if let Some(root) = self.root.clone() {
                     self.build(&root);
@@ -359,7 +385,10 @@ impl TreeState {
             return None; // same location, skip
         }
         if std::fs::rename(&marked, &new_path).is_ok() {
-            self.fs_undo_stack.push(FsOperation::Move { from: marked, to: new_path.clone() });
+            self.fs_undo_stack.push(FsOperation::Move {
+                from: marked,
+                to: new_path.clone(),
+            });
         }
         if let Some(root) = self.root.clone() {
             self.build(&root);
@@ -377,9 +406,7 @@ impl TreeState {
             None => return false,
         };
         let ok = match op {
-            FsOperation::Move { from, to } => {
-                std::fs::rename(&to, &from).is_ok()
-            }
+            FsOperation::Move { from, to } => std::fs::rename(&to, &from).is_ok(),
             FsOperation::Create { ref path, is_dir } => {
                 if is_dir {
                     std::fs::remove_dir_all(path).is_ok()
@@ -387,7 +414,11 @@ impl TreeState {
                     std::fs::remove_file(path).is_ok()
                 }
             }
-            FsOperation::Delete { ref path, ref content, is_dir } => {
+            FsOperation::Delete {
+                ref path,
+                ref content,
+                is_dir,
+            } => {
                 if is_dir {
                     std::fs::create_dir_all(path).is_ok()
                 } else {
@@ -395,9 +426,7 @@ impl TreeState {
                     std::fs::write(path, data).is_ok()
                 }
             }
-            FsOperation::Rename { from, to } => {
-                std::fs::rename(&to, &from).is_ok()
-            }
+            FsOperation::Rename { from, to } => std::fs::rename(&to, &from).is_ok(),
         };
         if ok {
             if let Some(root) = self.root.clone() {
@@ -430,24 +459,24 @@ fn file_icon(name: &str, is_dir: bool, is_open: bool) -> &'static str {
     }
     let ext = name.rsplit('.').next().unwrap_or("");
     match ext {
-        "rs" => "\u{e7a8}  ",      // nf-dev-rust
-        "py" => "\u{e73c}  ",      // nf-dev-python
+        "rs" => "\u{e7a8}  ",                 // nf-dev-rust
+        "py" => "\u{e73c}  ",                 // nf-dev-python
         "js" | "mjs" | "cjs" => "\u{e74e}  ", // nf-dev-javascript
-        "ts" | "tsx" => "\u{e628}  ", // nf-seti-typescript
-        "html" | "htm" => "\u{e736}  ", // nf-dev-html5
-        "css" | "scss" => "\u{e749}  ", // nf-dev-css3
-        "json" => "\u{e60b}  ",    // nf-seti-json
-        "toml" => "\u{e615}  ",    // nf-seti-config
+        "ts" | "tsx" => "\u{e628}  ",         // nf-seti-typescript
+        "html" | "htm" => "\u{e736}  ",       // nf-dev-html5
+        "css" | "scss" => "\u{e749}  ",       // nf-dev-css3
+        "json" => "\u{e60b}  ",               // nf-seti-json
+        "toml" => "\u{e615}  ",               // nf-seti-config
         "yaml" | "yml" => "\u{e615}  ",
-        "md" => "\u{e73e}  ",      // nf-dev-markdown
+        "md" => "\u{e73e}  ",                  // nf-dev-markdown
         "sh" | "bash" | "zsh" => "\u{e795}  ", // nf-dev-terminal
-        "php" => "\u{e73d}  ",     // nf-dev-php
-        "c" | "h" => "\u{e61e}  ", // nf-seti-c
-        "sql" => "\u{f1c0}  ",     // nf-fa-database
-        "lock" => "\u{f023}  ",    // nf-fa-lock
-        "txt" => "\u{f15c}  ",     // nf-fa-file_text
-        "gitignore" => "\u{e702}  ", // nf-dev-git
-        _ => "\u{f15b}  ",         // nf-fa-file
+        "php" => "\u{e73d}  ",                 // nf-dev-php
+        "c" | "h" => "\u{e61e}  ",             // nf-seti-c
+        "sql" => "\u{f1c0}  ",                 // nf-fa-database
+        "lock" => "\u{f023}  ",                // nf-fa-lock
+        "txt" => "\u{f15c}  ",                 // nf-fa-file_text
+        "gitignore" => "\u{e702}  ",           // nf-dev-git
+        _ => "\u{f15b}  ",                     // nf-fa-file
     }
 }
 
@@ -456,12 +485,33 @@ pub struct FileTreeWidget<'a> {
     pub theme: &'a crate::config::theme::Theme,
 }
 
+pub fn tree_inner_area(area: Rect) -> Rect {
+    Rect::new(
+        area.x.saturating_add(1),
+        area.y.saturating_add(1),
+        area.width.saturating_sub(2),
+        area.height.saturating_sub(2),
+    )
+}
+
+pub fn tree_list_height(area: Rect, has_action: bool) -> usize {
+    let inner_height = tree_inner_area(area).height as usize;
+    inner_height
+        .saturating_sub(1) // title row
+        .saturating_sub(usize::from(has_action)) // optional action row
+}
+
 impl<'a> Widget for FileTreeWidget<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
+        if area.width < 3 || area.height < 3 {
+            return;
+        }
+
         let bg = self.theme.popup_bg();
         let border_color = self.theme.popup_border();
         let selected_bg = self.theme.popup_selected();
         let dim = self.theme.popup_dim();
+        let accent = self.theme.popup_accent();
         let git_colors = |status: char| -> Color {
             match status {
                 'M' => Color::Rgb(249, 226, 175), // yellow
@@ -483,20 +533,71 @@ impl<'a> Widget for FileTreeWidget<'a> {
             }
         }
 
-        // right border
-        let border_x = area.x + area.width - 1;
+        // border
+        let right_x = area.x + area.width - 1;
+        let bottom_y = area.y + area.height - 1;
+        for x in area.x..=right_x {
+            let ch = if x == area.x || x == right_x {
+                '┌'
+            } else {
+                '─'
+            };
+            buf.cell_mut((x, area.y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(border_color).bg(bg));
+            });
+        }
+        for x in area.x..=right_x {
+            let ch = if x == area.x || x == right_x {
+                '└'
+            } else {
+                '─'
+            };
+            buf.cell_mut((x, bottom_y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(border_color).bg(bg));
+            });
+        }
         for y in area.y..area.y + area.height {
-            buf.cell_mut((border_x, y)).map(|cell| {
+            buf.cell_mut((area.x, y)).map(|cell| {
+                cell.set_char('│');
+                cell.set_style(Style::default().fg(border_color).bg(bg));
+            });
+            buf.cell_mut((right_x, y)).map(|cell| {
                 cell.set_char('│');
                 cell.set_style(Style::default().fg(border_color).bg(bg));
             });
         }
+        buf.cell_mut((area.x, area.y)).map(|cell| {
+            cell.set_char('┌');
+            cell.set_style(Style::default().fg(border_color).bg(bg));
+        });
+        buf.cell_mut((right_x, area.y)).map(|cell| {
+            cell.set_char('┐');
+            cell.set_style(Style::default().fg(border_color).bg(bg));
+        });
+        buf.cell_mut((area.x, bottom_y)).map(|cell| {
+            cell.set_char('└');
+            cell.set_style(Style::default().fg(border_color).bg(bg));
+        });
+        buf.cell_mut((right_x, bottom_y)).map(|cell| {
+            cell.set_char('┘');
+            cell.set_style(Style::default().fg(border_color).bg(bg));
+        });
 
-        let content_width = area.width.saturating_sub(1) as usize;
-        let visible_height = area.height as usize;
+        let inner = tree_inner_area(area);
+        if inner.width == 0 || inner.height == 0 {
+            return;
+        }
+
+        let content_width = inner.width as usize;
+        let title_y = inner.y;
 
         // title — use project root name from entries[0]
-        let root_name = self.state.entries.first()
+        let root_name = self
+            .state
+            .entries
+            .first()
             .map(|e| e.name.as_str())
             .unwrap_or("Explorer");
         let title = format!(" \u{f015}  {} - Explorer ", root_name); // nf-fa-home
@@ -504,22 +605,22 @@ impl<'a> Widget for FileTreeWidget<'a> {
         let title_bg = if is_root_selected { selected_bg } else { bg };
 
         // fill title bg
-        for lx in area.x..area.x + area.width - 1 {
-            buf.cell_mut((lx, area.y)).map(|cell| {
+        for lx in inner.x..inner.x + inner.width {
+            buf.cell_mut((lx, title_y)).map(|cell| {
                 cell.set_style(Style::default().bg(title_bg));
             });
         }
 
-        let mut x = area.x + 1;
+        let mut x = inner.x;
         for ch in title.chars() {
-            if x as usize >= area.x as usize + content_width {
+            if x as usize >= inner.x as usize + content_width {
                 break;
             }
-            buf.cell_mut((x, area.y)).map(|cell| {
+            buf.cell_mut((x, title_y)).map(|cell| {
                 cell.set_char(ch);
                 cell.set_style(
                     Style::default()
-                        .fg(self.theme.popup_accent())
+                        .fg(accent)
                         .bg(title_bg)
                         .add_modifier(Modifier::BOLD),
                 );
@@ -529,10 +630,10 @@ impl<'a> Widget for FileTreeWidget<'a> {
 
         // entries (skip index 0 = root, it's rendered as the title)
         let entries_start = 1usize;
-        for i in 0..(visible_height.saturating_sub(1)) {
+        for i in 0..tree_list_height(area, self.state.action != TreeAction::None) {
             let entry_idx = self.state.scroll_offset + i + 1; // +1 to skip root
-            let y = area.y + (entries_start + i) as u16;
-            if y >= area.y + area.height {
+            let y = inner.y + (entries_start + i) as u16;
+            if y >= inner.y + inner.height {
                 break;
             }
 
@@ -541,7 +642,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 let line_bg = if is_selected { selected_bg } else { bg };
 
                 // fill line bg
-                for lx in area.x..area.x + area.width - 1 {
+                for lx in inner.x..inner.x + inner.width {
                     buf.cell_mut((lx, y)).map(|cell| {
                         cell.set_style(Style::default().bg(line_bg));
                     });
@@ -555,12 +656,11 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     .map(|s| format!(" {}", s))
                     .unwrap_or_default();
 
-                let move_indicator =
-                    if self.state.marked_for_move.as_ref() == Some(&entry.path) {
-                        " [moving]"
-                    } else {
-                        ""
-                    };
+                let move_indicator = if self.state.marked_for_move.as_ref() == Some(&entry.path) {
+                    " [moving]"
+                } else {
+                    ""
+                };
 
                 let display = format!(
                     " {}{}{}{}{}",
@@ -573,9 +673,9 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 let name_start = icon_end;
                 let name_end = name_start + entry.name.len();
 
-                let mut cx = area.x;
+                let mut cx = inner.x;
                 for (ci, ch) in display.chars().enumerate() {
-                    if cx >= area.x + area.width - 1 {
+                    if cx >= inner.x + inner.width {
                         break;
                     }
                     let style = if ci >= icon_start && ci < icon_end {
@@ -609,7 +709,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
 
         // action input at bottom
         if self.state.action != TreeAction::None {
-            let action_y = area.y + area.height - 1;
+            let action_y = inner.y + inner.height - 1;
             let label = match self.state.action {
                 TreeAction::NewFile => " new file: ",
                 TreeAction::NewFolder => " new folder: ",
@@ -619,19 +719,16 @@ impl<'a> Widget for FileTreeWidget<'a> {
             };
             let display = format!("{}{}", label, self.state.input_buf);
 
-            for lx in area.x..area.x + area.width - 1 {
+            for lx in inner.x..inner.x + inner.width {
                 buf.cell_mut((lx, action_y)).map(|cell| {
                     cell.set_char(' ');
-                    cell.set_style(
-                        Style::default()
-                            .bg(Color::Rgb(45, 45, 65)),
-                    );
+                    cell.set_style(Style::default().bg(Color::Rgb(45, 45, 65)));
                 });
             }
 
-            let mut cx = area.x;
+            let mut cx = inner.x;
             for (ci, ch) in display.chars().enumerate() {
-                if cx >= area.x + area.width - 1 {
+                if cx >= inner.x + inner.width {
                     break;
                 }
                 let style = if ci < label.len() {

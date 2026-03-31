@@ -49,5 +49,5 @@ Terminal Event → crossterm
 1. `terminal.draw()` receives a closure
 2. Layout splits into editor area + statusbar (+ optional search/replace bar)
 3. `EditorView` widget renders: git gutter → line numbers → syntax-highlighted text → cursor
-4. Overlay popups render on top of the editor area (centered or left-aligned)
+4. Overlay popups render on top of the editor area (centered modals, including the file tree)
 5. Cursor shape set via crossterm (`SteadyBlock` for normal, `SteadyBar` for insert)

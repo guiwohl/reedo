@@ -6,7 +6,8 @@ Open with **Ctrl+E**. Toggle to close.
 
 - Title row shows ` <folder> - Explorer` with a home icon (nf-fa-home)
 - Selecting the title row = selecting the project root (for move operations)
-- Full terminal height, ~35% width, right border
+- Centered modal, roughly 70% width and 70% height
+- Box border around the explorer content
 - Nerd font icons for file types and folders (open/closed)
 - Mouse click to select entries, scroll wheel to navigate
 

@@ -11,26 +11,26 @@ use std::time::Duration;
 
 use clap::Parser;
 use crossterm::cursor::SetCursorStyle;
-use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::event::MouseEventKind;
-use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::execute;
+use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Terminal;
 
 use app::{App, Popup};
 use config::settings::Settings;
-use ui::render::EditorView;
-use ui::statusbar::StatusBar;
-use ui::search::SearchBar;
-use ui::replace::ReplaceBar;
 use ui::fuzzy::FuzzyFinderWidget;
-use ui::tree::FileTreeWidget;
-use ui::search_project::ProjectSearchWidget;
-use ui::replace_project::ProjectReplaceWidget;
-use ui::theme_switcher::ThemeSwitcherWidget;
 use ui::keybind_help::KeybindHelpWidget;
+use ui::render::EditorView;
+use ui::replace::ReplaceBar;
+use ui::replace_project::ProjectReplaceWidget;
+use ui::search::SearchBar;
+use ui::search_project::ProjectSearchWidget;
+use ui::statusbar::StatusBar;
+use ui::theme_switcher::ThemeSwitcherWidget;
+use ui::tree::FileTreeWidget;
 use ui::welcome::WelcomeScreen;
 
 #[derive(Parser)]
@@ -43,6 +43,37 @@ struct Cli {
 
     #[arg(long, hide = true)]
     dump_frames: Option<String>,
+}
+
+fn popup_overlay_area(full_area: Rect) -> Rect {
+    Rect::new(
+        full_area.x,
+        full_area.y,
+        full_area.width,
+        full_area.height.saturating_sub(1),
+    )
+}
+
+fn centered_popup_area(
+    layer: Rect,
+    width_pct: u16,
+    height_pct: u16,
+    min_width: u16,
+    min_height: u16,
+) -> Rect {
+    let popup_width = (layer.width.saturating_mul(width_pct) / 100)
+        .max(min_width)
+        .min(layer.width.saturating_sub(2).max(1));
+    let popup_height = (layer.height.saturating_mul(height_pct) / 100)
+        .max(min_height)
+        .min(layer.height.saturating_sub(2).max(1));
+    let x = layer.x + layer.width.saturating_sub(popup_width) / 2;
+    let y = layer.y + layer.height.saturating_sub(popup_height) / 2;
+    Rect::new(x, y, popup_width, popup_height)
+}
+
+fn file_tree_popup_area(full_area: Rect) -> Rect {
+    centered_popup_area(popup_overlay_area(full_area), 32, 70, 50, 12)
 }
 
 fn init_logging() {
@@ -92,9 +123,7 @@ fn run_tui(cli: Cli, settings: Settings) -> io::Result<()> {
 
     // set project root if not already set
     if app.project_root.is_none() {
-        app.set_project_root(
-            std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-        );
+        app.set_project_root(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     }
 
     terminal::enable_raw_mode()?;
@@ -153,15 +182,15 @@ fn event_loop(
                         Constraint::Length(1), // padding input bar
                         Constraint::Length(1), // status bar
                     ],
-                    _ => vec![
-                        Constraint::Min(1),
-                        Constraint::Length(1),
-                    ],
+                    _ => vec![Constraint::Min(1), Constraint::Length(1)],
                 })
                 .split(full_area);
 
             // show welcome screen if no file is open, otherwise editor
-            if app.buffer.file_path.is_none() && !app.buffer.dirty && app.buffer.rope.len_chars() == 0 {
+            if app.buffer.file_path.is_none()
+                && !app.buffer.dirty
+                && app.buffer.rope.len_chars() == 0
+            {
                 frame.render_widget(WelcomeScreen { theme: &app.theme }, main_chunks[0]);
             } else {
                 frame.render_widget(EditorView { app }, main_chunks[0]);
@@ -169,11 +198,23 @@ fn event_loop(
 
             match app.popup {
                 Popup::Search => {
-                    frame.render_widget(SearchBar { state: &app.search_state, theme: &app.theme }, main_chunks[1]);
+                    frame.render_widget(
+                        SearchBar {
+                            state: &app.search_state,
+                            theme: &app.theme,
+                        },
+                        main_chunks[1],
+                    );
                     frame.render_widget(StatusBar { app }, main_chunks[2]);
                 }
                 Popup::Replace => {
-                    frame.render_widget(ReplaceBar { state: &app.replace_state, theme: &app.theme }, main_chunks[1]);
+                    frame.render_widget(
+                        ReplaceBar {
+                            state: &app.replace_state,
+                            theme: &app.theme,
+                        },
+                        main_chunks[1],
+                    );
                     frame.render_widget(StatusBar { app }, main_chunks[2]);
                 }
                 Popup::PaddingInput => {
@@ -182,9 +223,11 @@ fn event_loop(
                     let bg = ratatui::style::Color::Rgb(30, 30, 46);
                     let fg = ratatui::style::Color::Rgb(192, 202, 245);
                     frame.render_widget(
-                        ratatui::widgets::Paragraph::new(
-                            format!(" Horizontal padding: {}█", app.padding_input)
-                        ).style(ratatui::style::Style::default().fg(fg).bg(bg)),
+                        ratatui::widgets::Paragraph::new(format!(
+                            " Horizontal padding: {}█",
+                            app.padding_input
+                        ))
+                        .style(ratatui::style::Style::default().fg(fg).bg(bg)),
                         bar_area,
                     );
                     frame.render_widget(StatusBar { app }, main_chunks[2]);
@@ -197,9 +240,14 @@ fn event_loop(
             // overlay popups
             match app.popup {
                 Popup::FileTree => {
-                    let tree_width = (full_area.width * 35 / 100).max(30).min(60);
-                    let tree_area = Rect::new(0, 0, tree_width, full_area.height - 1);
-                    frame.render_widget(FileTreeWidget { state: &app.tree_state, theme: &app.theme }, tree_area);
+                    let tree_area = file_tree_popup_area(full_area);
+                    frame.render_widget(
+                        FileTreeWidget {
+                            state: &app.tree_state,
+                            theme: &app.theme,
+                        },
+                        tree_area,
+                    );
                 }
                 Popup::FuzzyFinder => {
                     let popup_width = (full_area.width * 60 / 100).max(40);
@@ -207,7 +255,13 @@ fn event_loop(
                     let x = (full_area.width - popup_width) / 2;
                     let y = (full_area.height - popup_height) / 4;
                     let popup_area = Rect::new(x, y, popup_width, popup_height);
-                    frame.render_widget(FuzzyFinderWidget { state: &app.fuzzy_state, theme: &app.theme }, popup_area);
+                    frame.render_widget(
+                        FuzzyFinderWidget {
+                            state: &app.fuzzy_state,
+                            theme: &app.theme,
+                        },
+                        popup_area,
+                    );
                 }
                 Popup::SearchProject => {
                     let popup_width = (full_area.width * 70 / 100).max(50);
@@ -216,7 +270,10 @@ fn event_loop(
                     let y = (full_area.height - popup_height) / 4;
                     let popup_area = Rect::new(x, y, popup_width, popup_height);
                     frame.render_widget(
-                        ProjectSearchWidget { state: &app.project_search_state, theme: &app.theme },
+                        ProjectSearchWidget {
+                            state: &app.project_search_state,
+                            theme: &app.theme,
+                        },
                         popup_area,
                     );
                 }
@@ -227,7 +284,10 @@ fn event_loop(
                     let y = (full_area.height - popup_height) / 4;
                     let popup_area = Rect::new(x, y, popup_width, popup_height);
                     frame.render_widget(
-                        ProjectReplaceWidget { state: &app.project_replace_state, theme: &app.theme },
+                        ProjectReplaceWidget {
+                            state: &app.project_replace_state,
+                            theme: &app.theme,
+                        },
                         popup_area,
                     );
                 }
@@ -238,7 +298,10 @@ fn event_loop(
                     let y = (full_area.height - popup_height) / 4;
                     let popup_area = Rect::new(x, y, popup_width, popup_height);
                     frame.render_widget(
-                        ThemeSwitcherWidget { state: &app.theme_switcher_state, theme: &app.theme },
+                        ThemeSwitcherWidget {
+                            state: &app.theme_switcher_state,
+                            theme: &app.theme,
+                        },
                         popup_area,
                     );
                 }
@@ -249,7 +312,10 @@ fn event_loop(
                     let y = (full_area.height - popup_height) / 4;
                     let popup_area = Rect::new(x, y, popup_width, popup_height);
                     frame.render_widget(
-                        KeybindHelpWidget { state: &app.keybind_help_state, theme: &app.theme },
+                        KeybindHelpWidget {
+                            state: &app.keybind_help_state,
+                            theme: &app.theme,
+                        },
                         popup_area,
                     );
                 }
@@ -386,10 +452,8 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         while app.replace_state.awaiting_confirm {
                             if let Some((line, col)) = app.replace_state.current_pos() {
                                 let end_col = col + app.replace_state.search_query.len();
-                                let start =
-                                    crate::editor::cursor::Position::new(line, col);
-                                let end =
-                                    crate::editor::cursor::Position::new(line, end_col);
+                                let start = crate::editor::cursor::Position::new(line, col);
+                                let end = crate::editor::cursor::Position::new(line, end_col);
                                 app.buffer.undo_stack.begin_group(app.cursor.pos);
                                 app.buffer.delete_range(start, end);
                                 app.buffer
@@ -433,7 +497,13 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
 
         Popup::FileTree => {
             use crate::ui::tree::TreeAction;
-            let visible = app.viewport_height.saturating_sub(2);
+            let tree_area = file_tree_popup_area(Rect::new(
+                0,
+                0,
+                app.viewport_width as u16,
+                app.viewport_height as u16,
+            ));
+            let visible = crate::ui::tree::tree_list_height(tree_area, false);
 
             // ctrl+z: undo filesystem ops in tree, then buffer ops
             if ctrl && key.code == KeyCode::Char('z') {
@@ -457,36 +527,46 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             if app.tree_state.action != TreeAction::None {
                 match key.code {
                     KeyCode::Esc => app.tree_state.cancel_action(),
-                    KeyCode::Enter => {
-                        match app.tree_state.action {
-                            TreeAction::NewFile => {
-                                if let Some(new_path) = app.tree_state.confirm_new_file() {
-                                    let name = new_path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                                    let _ = app.open_file(&new_path);
-                                    app.flash(format!("created {}", name));
-                                    app.popup = Popup::None;
-                                }
+                    KeyCode::Enter => match app.tree_state.action {
+                        TreeAction::NewFile => {
+                            if let Some(new_path) = app.tree_state.confirm_new_file() {
+                                let name = new_path
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string();
+                                let _ = app.open_file(&new_path);
+                                app.flash(format!("created {}", name));
+                                app.popup = Popup::None;
                             }
-                            TreeAction::NewFolder => {
-                                if let Some(p) = app.tree_state.confirm_new_folder() {
-                                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                                    app.flash(format!("created {}/", name));
-                                }
-                            }
-                            TreeAction::Rename => {
-                                if let Some(p) = app.tree_state.confirm_rename() {
-                                    let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-                                    app.flash(format!("renamed to {}", name));
-                                }
-                            }
-                            TreeAction::Delete => {
-                                if app.tree_state.confirm_delete() {
-                                    app.flash("deleted");
-                                }
-                            }
-                            TreeAction::None => {}
                         }
-                    }
+                        TreeAction::NewFolder => {
+                            if let Some(p) = app.tree_state.confirm_new_folder() {
+                                let name = p
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string();
+                                app.flash(format!("created {}/", name));
+                            }
+                        }
+                        TreeAction::Rename => {
+                            if let Some(p) = app.tree_state.confirm_rename() {
+                                let name = p
+                                    .file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string();
+                                app.flash(format!("renamed to {}", name));
+                            }
+                        }
+                        TreeAction::Delete => {
+                            if app.tree_state.confirm_delete() {
+                                app.flash("deleted");
+                            }
+                        }
+                        TreeAction::None => {}
+                    },
                     KeyCode::Char('y') if app.tree_state.action == TreeAction::Delete => {
                         if app.tree_state.confirm_delete() {
                             app.flash("deleted");
@@ -533,7 +613,12 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         if let Some(entry) = app.tree_state.selected_entry() {
                             if entry.is_dir {
                                 if let Some(p) = app.tree_state.confirm_move() {
-                                    let dest = p.parent().unwrap_or(std::path::Path::new(".")).file_name().unwrap_or_default().to_string_lossy();
+                                    let dest = p
+                                        .parent()
+                                        .unwrap_or(std::path::Path::new("."))
+                                        .file_name()
+                                        .unwrap_or_default()
+                                        .to_string_lossy();
                                     app.flash(format!("moved to {}/", dest));
                                 }
                             }
@@ -696,9 +781,14 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         let name = selected.name.clone();
                         app.theme = selected;
                         if app.highlighter.is_active() {
-                            if let Some(config) = crate::syntax::highlight::Highlighter::detect_language(
-                                app.buffer.file_path.as_deref().unwrap_or(std::path::Path::new("")),
-                            ) {
+                            if let Some(config) =
+                                crate::syntax::highlight::Highlighter::detect_language(
+                                    app.buffer
+                                        .file_path
+                                        .as_deref()
+                                        .unwrap_or(std::path::Path::new("")),
+                                )
+                            {
                                 app.highlighter.set_language(&config, &app.theme.colors);
                                 let source = app.buffer.rope.to_string();
                                 app.highlighter.parse(&source);
@@ -728,26 +818,24 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             }
         }
 
-        Popup::PaddingInput => {
-            match key.code {
-                KeyCode::Esc => {
-                    app.popup = Popup::None;
-                }
-                KeyCode::Enter => {
-                    if let Ok(val) = app.padding_input.parse::<usize>() {
-                        app.horizontal_padding = val;
-                    }
-                    app.popup = Popup::None;
-                }
-                KeyCode::Backspace => {
-                    app.padding_input.pop();
-                }
-                KeyCode::Char(ch) if ch.is_ascii_digit() => {
-                    app.padding_input.push(ch);
-                }
-                _ => {}
+        Popup::PaddingInput => match key.code {
+            KeyCode::Esc => {
+                app.popup = Popup::None;
             }
-        }
+            KeyCode::Enter => {
+                if let Ok(val) = app.padding_input.parse::<usize>() {
+                    app.horizontal_padding = val;
+                }
+                app.popup = Popup::None;
+            }
+            KeyCode::Backspace => {
+                app.padding_input.pop();
+            }
+            KeyCode::Char(ch) if ch.is_ascii_digit() => {
+                app.padding_input.push(ch);
+            }
+            _ => {}
+        },
 
         Popup::None => unreachable!(),
     }
@@ -763,22 +851,49 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
     let text_area_x = gutter_width + h_padding;
     let full_width = app.viewport_width as u16;
     let full_height = app.viewport_height as u16;
-
-    let tree_width = if app.popup == Popup::FileTree {
-        (full_width * 35 / 100).max(30).min(60)
-    } else {
-        0
-    };
+    let full_area = Rect::new(0, 0, full_width, full_height);
 
     match mouse.kind {
         MouseEventKind::Down(crossterm::event::MouseButton::Left) => {
             let click_x = mouse.column;
             let click_y = mouse.row;
 
-            if app.popup == Popup::FileTree && click_x < tree_width {
-                let entry_idx = click_y as usize + app.tree_state.scroll_offset;
-                if entry_idx < app.tree_state.entries.len() {
-                    app.tree_state.selected = entry_idx;
+            if app.popup == Popup::FileTree {
+                let tree_area = file_tree_popup_area(full_area);
+                let inner = crate::ui::tree::tree_inner_area(tree_area);
+                let action_active = app.tree_state.action != crate::ui::tree::TreeAction::None;
+                let action_y = inner.y + inner.height.saturating_sub(1);
+
+                if click_x >= inner.x
+                    && click_x < inner.x + inner.width
+                    && click_y >= inner.y
+                    && click_y < inner.y + inner.height
+                {
+                    let entry_idx = if click_y == inner.y {
+                        Some(0)
+                    } else if action_active && click_y == action_y {
+                        None
+                    } else {
+                        Some(app.tree_state.scroll_offset + (click_y - inner.y - 1) as usize + 1)
+                    };
+
+                    if let Some(entry_idx) =
+                        entry_idx.filter(|idx| *idx < app.tree_state.entries.len())
+                    {
+                        if app.tree_state.selected == entry_idx {
+                            if let Some(entry) = app.tree_state.entries.get(entry_idx) {
+                                if entry.is_dir {
+                                    app.tree_state.toggle_dir();
+                                } else {
+                                    let path = entry.path.clone();
+                                    let _ = app.open_file(&path);
+                                    app.popup = Popup::None;
+                                }
+                            }
+                        } else {
+                            app.tree_state.selected = entry_idx;
+                        }
+                    }
                 }
                 return;
             }
@@ -788,7 +903,11 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 let popup_height = (full_height * 60 / 100).max(10);
                 let px = (full_width - popup_width) / 2;
                 let py = (full_height - popup_height) / 4;
-                if click_x >= px && click_x < px + popup_width && click_y >= py + 3 && click_y < py + popup_height {
+                if click_x >= px
+                    && click_x < px + popup_width
+                    && click_y >= py + 3
+                    && click_y < py + popup_height
+                {
                     let clicked_idx = app.fuzzy_state.scroll_offset + (click_y - py - 3) as usize;
                     if clicked_idx < app.fuzzy_state.filtered.len() {
                         app.fuzzy_state.selected = clicked_idx;
@@ -802,7 +921,11 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 let popup_height = (full_height * 50 / 100).max(10);
                 let px = (full_width - popup_width) / 2;
                 let py = (full_height - popup_height) / 4;
-                if click_x >= px && click_x < px + popup_width && click_y >= py + 3 && click_y < py + popup_height {
+                if click_x >= px
+                    && click_x < px + popup_width
+                    && click_y >= py + 3
+                    && click_y < py + popup_height
+                {
                     let clicked_idx = (click_y - py - 3) as usize;
                     if clicked_idx < app.theme_switcher_state.themes.len() {
                         app.theme_switcher_state.selected = clicked_idx;
@@ -816,8 +939,13 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 let popup_height = (full_height * 70 / 100).max(15);
                 let px = (full_width - popup_width) / 2;
                 let py = (full_height - popup_height) / 4;
-                if click_x >= px && click_x < px + popup_width && click_y >= py + 3 && click_y < py + popup_height {
-                    let clicked_idx = app.project_search_state.scroll_offset + (click_y - py - 3) as usize;
+                if click_x >= px
+                    && click_x < px + popup_width
+                    && click_y >= py + 3
+                    && click_y < py + popup_height
+                {
+                    let clicked_idx =
+                        app.project_search_state.scroll_offset + (click_y - py - 3) as usize;
                     if clicked_idx < app.project_search_state.results.len() {
                         app.project_search_state.selected = clicked_idx;
                     }
@@ -840,7 +968,8 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
 
         // drag = text selection
         MouseEventKind::Drag(crossterm::event::MouseButton::Left) => {
-            if app.popup == Popup::None || app.popup == Popup::Search || app.popup == Popup::Replace {
+            if app.popup == Popup::None || app.popup == Popup::Search || app.popup == Popup::Replace
+            {
                 let click_x = mouse.column;
                 let click_y = mouse.row;
                 if click_x >= text_area_x && click_y < full_height.saturating_sub(1) {
@@ -855,57 +984,62 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
             }
         }
 
-        MouseEventKind::ScrollUp => {
-            match app.popup {
-                Popup::FileTree => app.tree_state.move_up(),
-                Popup::FuzzyFinder => app.fuzzy_state.move_up(),
-                Popup::KeybindHelp => app.keybind_help_state.scroll_up(),
-                Popup::ThemeSwitcher => app.theme_switcher_state.move_up(),
-                Popup::SearchProject => app.project_search_state.move_up(),
-                _ => {
-                    if app.viewport_top > 0 {
-                        app.viewport_top = app.viewport_top.saturating_sub(3);
-                        if app.cursor.pos.line >= app.viewport_top + app.viewport_height.saturating_sub(2) {
-                            let new_line = app.viewport_top + app.viewport_height.saturating_sub(3);
-                            let col = app.cursor.desired_col.min(app.buffer.line_len(new_line));
-                            app.cursor.move_to(new_line, col, false);
-                        }
+        MouseEventKind::ScrollUp => match app.popup {
+            Popup::FileTree => app.tree_state.move_up(),
+            Popup::FuzzyFinder => app.fuzzy_state.move_up(),
+            Popup::KeybindHelp => app.keybind_help_state.scroll_up(),
+            Popup::ThemeSwitcher => app.theme_switcher_state.move_up(),
+            Popup::SearchProject => app.project_search_state.move_up(),
+            _ => {
+                if app.viewport_top > 0 {
+                    app.viewport_top = app.viewport_top.saturating_sub(3);
+                    if app.cursor.pos.line
+                        >= app.viewport_top + app.viewport_height.saturating_sub(2)
+                    {
+                        let new_line = app.viewport_top + app.viewport_height.saturating_sub(3);
+                        let col = app.cursor.desired_col.min(app.buffer.line_len(new_line));
+                        app.cursor.move_to(new_line, col, false);
                     }
                 }
             }
-        }
-        MouseEventKind::ScrollDown => {
-            match app.popup {
-                Popup::FileTree => {
-                    let visible = app.viewport_height.saturating_sub(2);
-                    app.tree_state.move_down(visible);
-                }
-                Popup::FuzzyFinder => {
-                    let visible = app.viewport_height.saturating_sub(6);
-                    app.fuzzy_state.move_down(visible);
-                }
-                Popup::KeybindHelp => {
-                    let max = crate::ui::keybind_help::KeybindHelpState::total_lines()
-                        .saturating_sub(app.viewport_height.saturating_sub(6));
-                    app.keybind_help_state.scroll_down(max);
-                }
-                Popup::ThemeSwitcher => app.theme_switcher_state.move_down(),
-                Popup::SearchProject => {
-                    let visible = app.viewport_height.saturating_sub(6);
-                    app.project_search_state.move_down(visible);
-                }
-                _ => {
-                    let max_top = line_count.saturating_sub(1);
-                    if app.viewport_top < max_top {
-                        app.viewport_top = (app.viewport_top + 3).min(max_top);
-                        if app.cursor.pos.line < app.viewport_top {
-                            let col = app.cursor.desired_col.min(app.buffer.line_len(app.viewport_top));
-                            app.cursor.move_to(app.viewport_top, col, false);
-                        }
+        },
+        MouseEventKind::ScrollDown => match app.popup {
+            Popup::FileTree => {
+                let tree_area = file_tree_popup_area(full_area);
+                let visible = crate::ui::tree::tree_list_height(
+                    tree_area,
+                    app.tree_state.action != crate::ui::tree::TreeAction::None,
+                );
+                app.tree_state.move_down(visible);
+            }
+            Popup::FuzzyFinder => {
+                let visible = app.viewport_height.saturating_sub(6);
+                app.fuzzy_state.move_down(visible);
+            }
+            Popup::KeybindHelp => {
+                let max = crate::ui::keybind_help::KeybindHelpState::total_lines()
+                    .saturating_sub(app.viewport_height.saturating_sub(6));
+                app.keybind_help_state.scroll_down(max);
+            }
+            Popup::ThemeSwitcher => app.theme_switcher_state.move_down(),
+            Popup::SearchProject => {
+                let visible = app.viewport_height.saturating_sub(6);
+                app.project_search_state.move_down(visible);
+            }
+            _ => {
+                let max_top = line_count.saturating_sub(1);
+                if app.viewport_top < max_top {
+                    app.viewport_top = (app.viewport_top + 3).min(max_top);
+                    if app.cursor.pos.line < app.viewport_top {
+                        let col = app
+                            .cursor
+                            .desired_col
+                            .min(app.buffer.line_len(app.viewport_top));
+                        app.cursor.move_to(app.viewport_top, col, false);
                     }
                 }
             }
-        }
+        },
         _ => {}
     }
 }
@@ -942,8 +1076,8 @@ fn run_headless(cli: Cli, settings: Settings) -> io::Result<()> {
     }
 
     let input: String = io::read_to_string(io::stdin())?;
-    let parsed: HeadlessInput = serde_json::from_str(&input)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let parsed: HeadlessInput =
+        serde_json::from_str(&input).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
     for key_str in &parsed.keys {
         if let Some(key_event) = parse_key_string(key_str) {

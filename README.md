@@ -21,7 +21,7 @@ kilo src/main.rs        # open with project context
 - **Vim-inspired modes** — Normal and Insert, no complexity
 - **Syntax highlighting** — 17 languages via tree-sitter + custom markdown highlighter
 - **Mouse support** — click to place cursor, drag to select, scroll wheel navigation
-- **File explorer** (Ctrl+E) — tree view with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo (Ctrl+Z)
+- **File explorer** (Ctrl+E) — centered tree modal with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo (Ctrl+Z)
 - **Fuzzy file finder** (Ctrl+P) — type to search, instant open
 - **Search & replace** — in-file (Ctrl+F / Ctrl+H) and project-wide (Ctrl+Shift+F / Ctrl+Shift+H) with one-by-one approval
 - **8 bundled themes** — kilo-dark, kilo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark

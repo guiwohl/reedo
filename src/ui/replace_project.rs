@@ -187,13 +187,41 @@ impl ProjectReplaceState {
 fn is_binary_ext(ext: &str) -> bool {
     matches!(
         ext,
-        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp"
-            | "mp3" | "mp4" | "avi" | "mov" | "mkv"
-            | "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar"
-            | "exe" | "dll" | "so" | "dylib" | "o" | "a"
-            | "wasm" | "pdf" | "doc" | "docx"
-            | "ttf" | "otf" | "woff" | "woff2"
-            | "sqlite" | "db"
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "bmp"
+            | "ico"
+            | "webp"
+            | "mp3"
+            | "mp4"
+            | "avi"
+            | "mov"
+            | "mkv"
+            | "zip"
+            | "tar"
+            | "gz"
+            | "bz2"
+            | "xz"
+            | "7z"
+            | "rar"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "o"
+            | "a"
+            | "wasm"
+            | "pdf"
+            | "doc"
+            | "docx"
+            | "ttf"
+            | "otf"
+            | "woff"
+            | "woff2"
+            | "sqlite"
+            | "db"
     )
 }
 
@@ -240,7 +268,9 @@ impl<'a> Widget for ProjectReplaceWidget<'a> {
             let display = format!("{}{}", label, self.state.search_query);
             let mut x = area.x;
             for (i, ch) in display.chars().enumerate() {
-                if x >= area.x + area.width { break; }
+                if x >= area.x + area.width {
+                    break;
+                }
                 let style = if i < label.len() {
                     Style::default().fg(accent).bg(sbg)
                 } else {
@@ -276,7 +306,9 @@ impl<'a> Widget for ProjectReplaceWidget<'a> {
             let display = format!("{}{}{}", label, self.state.replace_query, status);
             let mut x = area.x;
             for (i, ch) in display.chars().enumerate() {
-                if x >= area.x + area.width { break; }
+                if x >= area.x + area.width {
+                    break;
+                }
                 let style = if i < label.len() {
                     Style::default().fg(accent).bg(rbg)
                 } else {
@@ -295,15 +327,12 @@ impl<'a> Widget for ProjectReplaceWidget<'a> {
             if let Some(m) = self.state.current_match() {
                 let preview_y = area.y + 4;
                 let path_str = m.path.to_string_lossy();
-                let display = format!(
-                    "  {}:{} {}",
-                    path_str,
-                    m.line + 1,
-                    m.text.trim()
-                );
+                let display = format!("  {}:{} {}", path_str, m.line + 1, m.text.trim());
                 let mut x = area.x;
                 for ch in display.chars() {
-                    if x >= area.x + area.width { break; }
+                    if x >= area.x + area.width {
+                        break;
+                    }
                     buf.cell_mut((x, preview_y)).map(|cell| {
                         cell.set_char(ch);
                         cell.set_style(Style::default().fg(warn).bg(bg));

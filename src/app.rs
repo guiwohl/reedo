@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use std::collections::HashMap;
 use crate::config::settings::Settings;
 use crate::config::theme::{self, Theme};
 use crate::editor::buffer::Buffer;
@@ -9,14 +8,15 @@ use crate::editor::cursor::Cursor;
 use crate::editor::mode::Mode;
 use crate::git::status::{GitInfo, GutterMark};
 use crate::syntax::highlight::Highlighter;
-use crate::ui::tree::TreeState;
-use crate::ui::search::SearchState;
-use crate::ui::replace::ReplaceState;
 use crate::ui::fuzzy::FuzzyState;
-use crate::ui::search_project::ProjectSearchState;
-use crate::ui::replace_project::ProjectReplaceState;
-use crate::ui::theme_switcher::ThemeSwitcherState;
 use crate::ui::keybind_help::KeybindHelpState;
+use crate::ui::replace::ReplaceState;
+use crate::ui::replace_project::ProjectReplaceState;
+use crate::ui::search::SearchState;
+use crate::ui::search_project::ProjectSearchState;
+use crate::ui::theme_switcher::ThemeSwitcherState;
+use crate::ui::tree::TreeState;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Popup {
@@ -173,7 +173,8 @@ impl App {
                     self.flash("saved");
                     let path = self.buffer.file_path.clone();
                     if let Some(p) = path {
-                        self.last_file_mtime = std::fs::metadata(&p).ok().and_then(|m| m.modified().ok());
+                        self.last_file_mtime =
+                            std::fs::metadata(&p).ok().and_then(|m| m.modified().ok());
                     }
                 }
                 self.last_edit_time = None;
@@ -204,7 +205,10 @@ impl App {
             None => return,
         };
 
-        let current_mtime = match std::fs::metadata(&path).ok().and_then(|m| m.modified().ok()) {
+        let current_mtime = match std::fs::metadata(&path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+        {
             Some(t) => t,
             None => return,
         };

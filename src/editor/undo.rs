@@ -2,12 +2,29 @@ use crate::editor::cursor::Position;
 
 #[derive(Debug, Clone)]
 pub enum Operation {
-    InsertChar { pos: Position, ch: char },
-    DeleteChar { pos: Position, ch: char },
-    InsertNewline { pos: Position },
-    DeleteNewline { pos: Position },
-    InsertText { pos: Position, text: String },
-    DeleteText { start: Position, end: Position, text: String },
+    InsertChar {
+        pos: Position,
+        ch: char,
+    },
+    DeleteChar {
+        pos: Position,
+        ch: char,
+    },
+    InsertNewline {
+        pos: Position,
+    },
+    DeleteNewline {
+        pos: Position,
+    },
+    InsertText {
+        pos: Position,
+        text: String,
+    },
+    DeleteText {
+        start: Position,
+        end: Position,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone)]

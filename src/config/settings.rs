@@ -43,11 +43,21 @@ pub struct Settings {
     pub theme: String,
 }
 
-fn default_indent_size() -> usize { 4 }
-fn default_use_spaces() -> bool { true }
-fn default_autosave_delay_ms() -> u64 { 500 }
-fn default_horizontal_padding() -> usize { 4 }
-fn default_theme() -> String { "kilo-dark".to_string() }
+fn default_indent_size() -> usize {
+    4
+}
+fn default_use_spaces() -> bool {
+    true
+}
+fn default_autosave_delay_ms() -> u64 {
+    500
+}
+fn default_horizontal_padding() -> usize {
+    4
+}
+fn default_theme() -> String {
+    "kilo-dark".to_string()
+}
 
 impl Default for Settings {
     fn default() -> Self {

@@ -4,98 +4,131 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
 const SECTIONS: &[(&str, &[(&str, &str)])] = &[
-    ("Modes", &[
-        ("i / Insert", "enter insert mode"),
-        ("Esc", "normal mode / close popup"),
-    ]),
-    ("Navigation (both modes)", &[
-        ("Arrow keys", "move cursor"),
-        ("Ctrl+Left/Right", "jump words"),
-        ("Ctrl+Alt+Up/Down", "jump paragraphs"),
-        ("Home / End", "start / end of line"),
-        ("Shift+Arrows", "select text"),
-        ("Ctrl+Shift+Left/Right", "select words"),
-    ]),
-    ("Insert Mode", &[
-        ("Any character", "type text"),
-        ("Enter", "new line (smart indent)"),
-        ("Tab", "insert indent (spaces)"),
-        ("Backspace", "delete char backward"),
-        ("Delete", "delete char forward"),
-        ("Ctrl+W / Ctrl+Bksp", "delete word backward"),
-    ]),
-    ("Normal Mode", &[
-        ("i", "enter insert mode"),
-        ("dd", "delete (cut) entire line"),
-        ("yy", "yank (copy) entire line"),
-        ("p", "paste yanked line below"),
-        ("x", "delete char under cursor"),
-        ("o", "new line below + insert mode"),
-        ("O", "new line above + insert mode"),
-        ("?", "show this help"),
-    ]),
-    ("Clipboard (both modes)", &[
-        ("Ctrl+C", "copy selection to clipboard"),
-        ("Ctrl+X", "cut selection to clipboard"),
-        ("Ctrl+V", "paste from clipboard"),
-    ]),
-    ("Undo / Redo", &[
-        ("Ctrl+Z", "undo"),
-        ("Ctrl+Y", "redo"),
-    ]),
-    ("Selection", &[
-        ("Shift+Arrow keys", "select by char/line"),
-        ("Ctrl+Shift+Arrow", "select by word"),
-        ("Ctrl+A", "select all"),
-    ]),
-    ("Search & Replace", &[
-        ("Ctrl+F", "search in current file"),
-        ("  Enter / Shift+Enter", "next / prev match"),
-        ("Ctrl+H", "find & replace in file"),
-        ("  Tab", "switch search/replace field"),
-        ("  y / n / a", "apply / skip / all"),
-        ("Ctrl+Shift+F", "search across project"),
-        ("Ctrl+Shift+H", "replace across project"),
-    ]),
-    ("Files & UI", &[
-        ("Ctrl+E", "toggle file explorer"),
-        ("Ctrl+P", "fuzzy file finder"),
-        ("Ctrl+T", "switch theme"),
-        ("Ctrl+,", "open config file"),
-        ("Ctrl+S", "save file"),
-        ("Ctrl+Q", "quit kilo"),
-        ("F1 / ?", "show this help"),
-    ]),
-    ("File Explorer (Ctrl+E)", &[
-        ("Up / Down", "navigate entries"),
-        ("Enter / Right", "open file / expand folder"),
-        ("Left", "collapse folder"),
-        ("n", "create new file"),
-        ("f", "create new folder"),
-        ("r", "rename selected"),
-        ("d", "delete selected"),
-        ("m", "mark for move"),
-        ("m / Enter on folder", "confirm move to folder"),
-        ("Esc", "cancel move / close explorer"),
-    ]),
-    ("In-File Search (Ctrl+F)", &[
-        ("Type text", "live search"),
-        ("Enter", "jump to next match"),
-        ("Shift+Enter", "jump to prev match"),
-        ("Esc", "close search"),
-    ]),
-    ("Fuzzy Finder (Ctrl+P)", &[
-        ("Type text", "filter files"),
-        ("Up / Down", "navigate results"),
-        ("Enter", "open selected file"),
-        ("Esc", "close finder"),
-    ]),
-    ("Auto Behaviors", &[
-        ("Auto-close", "() [] {} <> \"\" '' ``"),
-        ("Auto-save", "500ms after last edit"),
-        ("Smart indent", "after { ( [ :"),
-        ("Overtype", "typing ) ] } skips existing"),
-    ]),
+    (
+        "Modes",
+        &[
+            ("i / Insert", "enter insert mode"),
+            ("Esc", "normal mode / close popup"),
+        ],
+    ),
+    (
+        "Navigation (both modes)",
+        &[
+            ("Arrow keys", "move cursor"),
+            ("Ctrl+Left/Right", "jump words"),
+            ("Ctrl+Alt+Up/Down", "jump paragraphs"),
+            ("Home / End", "start / end of line"),
+            ("Shift+Arrows", "select text"),
+            ("Ctrl+Shift+Left/Right", "select words"),
+        ],
+    ),
+    (
+        "Insert Mode",
+        &[
+            ("Any character", "type text"),
+            ("Enter", "new line (smart indent)"),
+            ("Tab", "insert indent (spaces)"),
+            ("Backspace", "delete char backward"),
+            ("Delete", "delete char forward"),
+            ("Ctrl+W / Ctrl+Bksp", "delete word backward"),
+        ],
+    ),
+    (
+        "Normal Mode",
+        &[
+            ("i", "enter insert mode"),
+            ("dd", "delete (cut) entire line"),
+            ("yy", "yank (copy) entire line"),
+            ("p", "paste yanked line below"),
+            ("x", "delete char under cursor"),
+            ("o", "new line below + insert mode"),
+            ("O", "new line above + insert mode"),
+            ("?", "show this help"),
+        ],
+    ),
+    (
+        "Clipboard (both modes)",
+        &[
+            ("Ctrl+C", "copy selection to clipboard"),
+            ("Ctrl+X", "cut selection to clipboard"),
+            ("Ctrl+V", "paste from clipboard"),
+        ],
+    ),
+    ("Undo / Redo", &[("Ctrl+Z", "undo"), ("Ctrl+Y", "redo")]),
+    (
+        "Selection",
+        &[
+            ("Shift+Arrow keys", "select by char/line"),
+            ("Ctrl+Shift+Arrow", "select by word"),
+            ("Ctrl+A", "select all"),
+        ],
+    ),
+    (
+        "Search & Replace",
+        &[
+            ("Ctrl+F", "search in current file"),
+            ("  Enter / Shift+Enter", "next / prev match"),
+            ("Ctrl+H", "find & replace in file"),
+            ("  Tab", "switch search/replace field"),
+            ("  y / n / a", "apply / skip / all"),
+            ("Ctrl+Shift+F", "search across project"),
+            ("Ctrl+Shift+H", "replace across project"),
+        ],
+    ),
+    (
+        "Files & UI",
+        &[
+            ("Ctrl+E", "toggle file explorer"),
+            ("Ctrl+P", "fuzzy file finder"),
+            ("Ctrl+T", "switch theme"),
+            ("Ctrl+,", "open config file"),
+            ("Ctrl+S", "save file"),
+            ("Ctrl+Q", "quit kilo"),
+            ("F1 / ?", "show this help"),
+        ],
+    ),
+    (
+        "File Explorer (Ctrl+E)",
+        &[
+            ("Up / Down", "navigate entries"),
+            ("Enter / Right", "open file / expand folder"),
+            ("Left", "collapse folder"),
+            ("n", "create new file"),
+            ("f", "create new folder"),
+            ("r", "rename selected"),
+            ("d", "delete selected"),
+            ("m", "mark for move"),
+            ("m / Enter on folder", "confirm move to folder"),
+            ("Esc", "cancel move / close explorer"),
+        ],
+    ),
+    (
+        "In-File Search (Ctrl+F)",
+        &[
+            ("Type text", "live search"),
+            ("Enter", "jump to next match"),
+            ("Shift+Enter", "jump to prev match"),
+            ("Esc", "close search"),
+        ],
+    ),
+    (
+        "Fuzzy Finder (Ctrl+P)",
+        &[
+            ("Type text", "filter files"),
+            ("Up / Down", "navigate results"),
+            ("Enter", "open selected file"),
+            ("Esc", "close finder"),
+        ],
+    ),
+    (
+        "Auto Behaviors",
+        &[
+            ("Auto-close", "() [] {} <> \"\" '' ``"),
+            ("Auto-save", "500ms after last edit"),
+            ("Smart indent", "after { ( [ :"),
+            ("Overtype", "typing ) ] } skips existing"),
+        ],
+    ),
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -166,7 +199,9 @@ impl<'a> Widget for KeybindHelpWidget<'a> {
             let title = " Keybindings ";
             let mut x = area.x + 2;
             for ch in title.chars() {
-                if x >= area.x + area.width { break; }
+                if x >= area.x + area.width {
+                    break;
+                }
                 buf.cell_mut((x, area.y + 1)).map(|cell| {
                     cell.set_char(ch);
                     cell.set_style(
@@ -207,15 +242,21 @@ impl<'a> Widget for KeybindHelpWidget<'a> {
         for i in 0..content_height {
             let line_idx = self.state.scroll + i;
             let y = area.y + content_start + i as u16;
-            if y >= area.y + area.height { break; }
-            if line_idx >= lines.len() { break; }
+            if y >= area.y + area.height {
+                break;
+            }
+            if line_idx >= lines.len() {
+                break;
+            }
 
             match lines[line_idx] {
                 Line::Section(name) => {
                     let display = format!("  {}", name);
                     let mut x = area.x;
                     for ch in display.chars() {
-                        if x >= area.x + area.width { break; }
+                        if x >= area.x + area.width {
+                            break;
+                        }
                         buf.cell_mut((x, y)).map(|cell| {
                             cell.set_char(ch);
                             cell.set_style(
@@ -232,7 +273,9 @@ impl<'a> Widget for KeybindHelpWidget<'a> {
                     let key_display = format!("    {:<width$}", key, width = key_col_width);
                     let mut x = area.x;
                     for ch in key_display.chars() {
-                        if x >= area.x + area.width { break; }
+                        if x >= area.x + area.width {
+                            break;
+                        }
                         buf.cell_mut((x, y)).map(|cell| {
                             cell.set_char(ch);
                             cell.set_style(Style::default().fg(key_color).bg(bg));
@@ -240,7 +283,9 @@ impl<'a> Widget for KeybindHelpWidget<'a> {
                         x += 1;
                     }
                     for ch in desc.chars() {
-                        if x >= area.x + area.width { break; }
+                        if x >= area.x + area.width {
+                            break;
+                        }
                         buf.cell_mut((x, y)).map(|cell| {
                             cell.set_char(ch);
                             cell.set_style(Style::default().fg(desc_color).bg(bg));

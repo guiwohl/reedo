@@ -351,7 +351,6 @@ const ZIG_HIGHLIGHTS: &str = r##"
 (IDENTIFIER) @variable
 "##;
 
-
 const MAKE_HIGHLIGHTS: &str = r##"
 (comment) @comment
 (rule (targets) @function)

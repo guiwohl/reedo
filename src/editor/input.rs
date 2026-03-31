@@ -204,8 +204,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
         KeyCode::Down if ctrl_alt => {
             let new_line = find_next_paragraph(app);
-            app.cursor
-                .move_to(new_line, 0, shift);
+            app.cursor.move_to(new_line, 0, shift);
             app.cursor.update_desired_col();
         }
 
@@ -339,7 +338,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 let line_text = app.buffer.line_text(app.cursor.pos.line);
                 let chars: Vec<char> = line_text.chars().collect();
                 if app.cursor.pos.col < chars.len() && chars[app.cursor.pos.col] == ch {
-                    app.cursor.move_to(app.cursor.pos.line, app.cursor.pos.col + 1, false);
+                    app.cursor
+                        .move_to(app.cursor.pos.line, app.cursor.pos.col + 1, false);
                     app.cursor.update_desired_col();
                     return;
                 }
@@ -390,9 +390,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 None
             };
             let extra_indent = match char_before_cursor {
-                Some('{') | Some('(') | Some('[') | Some(':') => {
-                    " ".repeat(app.indent_size)
-                }
+                Some('{') | Some('(') | Some('[') | Some(':') => " ".repeat(app.indent_size),
                 _ => String::new(),
             };
 
