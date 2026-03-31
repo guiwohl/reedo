@@ -2,12 +2,12 @@
 
 ## Bundled Themes
 
-Kilo ships with 8 themes:
+Reedo ships with 8 themes:
 
 | Theme | Vibe |
 |---|---|
-| `kilo-dark` | Default. Tokyo Night inspired, soft contrast |
-| `kilo-light` | Light theme, One Light inspired |
+| `reedo-dark` | Default. Tokyo Night inspired, soft contrast |
+| `reedo-light` | Light theme, One Light inspired |
 | `catppuccin` | Catppuccin Mocha palette |
 | `dracula` | Classic Dracula |
 | `gruvbox` | Retro groove |
@@ -18,11 +18,11 @@ Kilo ships with 8 themes:
 ## Switching Themes
 
 - **Ctrl+T** opens the theme switcher modal at runtime
-- Or set `theme = "dracula"` in `~/.config/kilo/kilo.conf.toml`
+- Or set `theme = "dracula"` in `~/.config/reedo/reedo.conf.toml`
 
 ## Custom Themes
 
-Create a `.toml` file in `~/.config/kilo/themes/`:
+Create a `.toml` file in `~/.config/reedo/themes/`:
 
 ```toml
 name = "my-theme"
@@ -71,4 +71,4 @@ All values are hex RGB strings. Every field has a default so you can override ju
 
 Shows all bundled + custom themes. Each entry has color preview dots showing the theme's keyword/string/function/type/number/comment colors. Arrow keys to navigate, Enter to apply.
 
-The theme is applied instantly — syntax highlighting colors update in real time. The selected theme is persisted to `kilo.conf.toml` via `Settings::update_theme()`, so it survives restarts.
+The theme is applied instantly — syntax highlighting colors update in real time. The selected theme is persisted to `reedo.conf.toml` via `Settings::update_theme()`, so it survives restarts.

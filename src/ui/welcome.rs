@@ -4,15 +4,12 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
 
 const LOGO: &[&str] = &[
-    r" _    _ _       ",
-    r"| | _(_) | ___  ",
-    r"| |/ / | |/ _ \ ",
-    r"|   <| | | (_) |",
-    r"|_|\_\_|_|\___/ ",
+    r"(o<  -- Reedo!",
+    r"//\",
+    r"V_/_ ",
 ];
 
-const SUBTITLE: &str = "a minimal text editor";
-const HINT: &str = "press F1 or ? for keybindings";
+const HINT: &str = "press F1 for keybindings";
 
 pub struct WelcomeScreen<'a> {
     pub theme: &'a crate::config::theme::Theme,
@@ -20,19 +17,19 @@ pub struct WelcomeScreen<'a> {
 
 impl<'a> Widget for WelcomeScreen<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let total_lines = LOGO.len() + 3;
+        let total_lines = LOGO.len() + 2;
         let start_y = area.height.saturating_sub(total_lines as u16) / 3;
+        let logo_width = LOGO.iter().map(|line| line.len()).max().unwrap_or(0) as u16;
 
         let logo_color = self.theme.popup_accent();
-        let sub_color = self.theme.popup_dim();
+        let logo_x = area.x + area.width.saturating_sub(logo_width) / 2;
 
         for (i, line) in LOGO.iter().enumerate() {
             let y = area.y + start_y + i as u16;
             if y >= area.y + area.height {
                 break;
             }
-            let x_offset = area.width.saturating_sub(line.len() as u16) / 2;
-            let mut x = area.x + x_offset;
+            let mut x = logo_x;
             for ch in line.chars() {
                 if x >= area.x + area.width {
                     break;
@@ -45,25 +42,8 @@ impl<'a> Widget for WelcomeScreen<'a> {
             }
         }
 
-        // subtitle
-        let sub_y = area.y + start_y + LOGO.len() as u16 + 1;
-        if sub_y < area.y + area.height {
-            let x_offset = area.width.saturating_sub(SUBTITLE.len() as u16) / 2;
-            let mut x = area.x + x_offset;
-            for ch in SUBTITLE.chars() {
-                if x >= area.x + area.width {
-                    break;
-                }
-                buf.cell_mut((x, sub_y)).map(|cell| {
-                    cell.set_char(ch);
-                    cell.set_style(Style::default().fg(sub_color));
-                });
-                x += 1;
-            }
-        }
-
         // hint
-        let hint_y = sub_y + 1;
+        let hint_y = area.y + start_y + LOGO.len() as u16 + 1;
         if hint_y < area.y + area.height {
             let x_offset = area.width.saturating_sub(HINT.len() as u16) / 2;
             let mut x = area.x + x_offset;

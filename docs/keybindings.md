@@ -35,6 +35,7 @@
 
 | Key | Action |
 |---|---|
+| `e` | Open file explorer |
 | `i` | Enter insert mode |
 | `dd` | Delete (cut) entire line |
 | `yy` | Yank (copy) entire line |

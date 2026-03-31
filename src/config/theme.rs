@@ -117,7 +117,7 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            name: "kilo-dark".to_string(),
+            name: "reedo-dark".to_string(),
             colors: ThemeColors::default(),
         }
     }
@@ -195,9 +195,9 @@ pub fn parse_hex_color(hex: &str) -> ratatui::style::Color {
 
 pub fn bundled_themes() -> Vec<Theme> {
     vec![
-        Theme::default(), // kilo-dark
+        Theme::default(), // reedo-dark
         Theme {
-            name: "kilo-light".to_string(),
+            name: "reedo-light".to_string(),
             colors: ThemeColors {
                 bg: "#fafafa".into(),
                 fg: "#383a42".into(),
@@ -350,7 +350,7 @@ pub fn load_theme(name: &str) -> Theme {
     // check for custom theme file
     let theme_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("~/.config"))
-        .join("kilo")
+        .join("reedo")
         .join("themes");
 
     let theme_file = theme_dir.join(format!("{}.toml", name));

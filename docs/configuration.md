@@ -3,12 +3,12 @@
 ## Location
 
 ```
-~/.config/kilo/kilo.conf.toml
+~/.config/reedo/reedo.conf.toml
 ```
 
 Created automatically on first run with all options commented out (defaults apply).
 
-Open it from kilo with **Ctrl+,**.
+Open it from reedo with **Ctrl+,**.
 
 ## Options
 
@@ -27,31 +27,31 @@ autosave_delay_ms = 500
 horizontal_padding = 4
 
 # color theme name
-# bundled: kilo-dark, kilo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
-# custom: drop a .toml in ~/.config/kilo/themes/
-theme = "kilo-dark"
+# bundled: reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
+# custom: drop a .toml in ~/.config/reedo/themes/
+theme = "reedo-dark"
 ```
 
 ## Directory Structure
 
 ```
-~/.config/kilo/
-├── kilo.conf.toml      # main config
+~/.config/reedo/
+├── reedo.conf.toml     # main config
 └── themes/             # custom theme files
     └── my-theme.toml
 ```
 
 ## Runtime Overrides
 
-Some settings can be changed without restarting kilo:
+Some settings can be changed without restarting reedo:
 
 | Setting | How |
 |---|---|
 | Theme | Ctrl+T (theme switcher) — persists to config file |
 | Horizontal padding | F2 or Ctrl+] (type a number, Enter) |
 
-Other settings require restarting kilo after editing the config file.
+Other settings require restarting reedo after editing the config file.
 
 ## External File Reload
 
-If the currently open file is modified outside kilo (e.g. by git, another editor), kilo detects the change every ~1 second and reloads automatically. If the buffer has unsaved local edits, the external change is skipped to avoid data loss. A flash notification confirms the reload.
+If the currently open file is modified outside reedo (e.g. by git, another editor), reedo detects the change every ~1 second and reloads automatically. If the buffer has unsaved local edits, the external change is skipped to avoid data loss. A flash notification confirms the reload.

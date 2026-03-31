@@ -116,7 +116,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         // popup keybinds
-        KeyCode::Char('e') if ctrl => {
+        KeyCode::Char('e') if ctrl || (app.mode == Mode::Normal && !shift) => {
             if app.popup == crate::app::Popup::FileTree {
                 app.popup = crate::app::Popup::None;
             } else {

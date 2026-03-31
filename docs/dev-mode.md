@@ -3,9 +3,9 @@
 ## File Logging
 
 ```bash
-KILO_LOG=1 cargo run -- myfile.txt
-# logs go to /tmp/kilo-debug.log
-tail -f /tmp/kilo-debug.log  # in another terminal
+REEDO_LOG=1 cargo run -- myfile.txt
+# logs go to /tmp/reedo-debug.log
+tail -f /tmp/reedo-debug.log  # in another terminal
 ```
 
 Logs every keypress, mode change, buffer mutation, file open, syntax loading, git refresh, and errors.

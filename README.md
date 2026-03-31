@@ -1,4 +1,4 @@
-# kilo
+# reedo
 
 A minimal terminal text editor built in Rust. Son of fresh and neovim, but simpler than both.
 
@@ -11,9 +11,9 @@ cargo install --path .
 ## Usage
 
 ```bash
-kilo                    # open with welcome screen
-kilo file.rs            # open a file
-kilo src/main.rs        # open with project context
+reedo                   # open with welcome screen
+reedo file.rs           # open a file
+reedo src/main.rs       # open with project context
 ```
 
 ## Features
@@ -24,9 +24,9 @@ kilo src/main.rs        # open with project context
 - **File explorer** (Ctrl+E) — centered tree modal with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo (Ctrl+Z)
 - **Fuzzy file finder** (Ctrl+P) — type to search, instant open
 - **Search & replace** — in-file (Ctrl+F / Ctrl+H) and project-wide (Ctrl+Shift+F / Ctrl+Shift+H) with one-by-one approval
-- **8 bundled themes** — kilo-dark, kilo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
+- **8 bundled themes** — reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
 - **Theme switcher** (Ctrl+T) — live preview with color dots, persists to config
-- **Custom themes** — drop a `.toml` in `~/.config/kilo/themes/`
+- **Custom themes** — drop a `.toml` in `~/.config/reedo/themes/`
 - **Git integration** — branch, changed/staged/ahead/behind in statusbar, file status in tree, gutter marks for additions/modifications/deletions
 - **Flash notifications** — transient status messages (save, reload, theme switch) in the statusbar
 - **External file reload** — detects changes made outside the editor and reloads automatically
@@ -34,7 +34,7 @@ kilo src/main.rs        # open with project context
 - **Smart indent** — auto-indent after `{`, `(`, `[`, `:`
 - **Autosave** — debounced, 500ms after last edit
 - **System clipboard** — Ctrl+C/V/X
-- **TOML config** — `~/.config/kilo/kilo.conf.toml`
+- **TOML config** — `~/.config/reedo/reedo.conf.toml`
 
 ## Keybindings
 
@@ -66,6 +66,7 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 
 | Key | Action |
 |---|---|
+| `e` | File explorer |
 | `dd` | Delete (cut) line |
 | `yy` | Yank (copy) line |
 | `p` | Paste below |
@@ -76,6 +77,7 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 
 | Key | Action |
 |---|---|
+| `e` | Open file explorer |
 | Ctrl+E | File explorer |
 | Ctrl+P | Fuzzy finder |
 | Ctrl+F | Search in file |
@@ -102,19 +104,19 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 
 ## Config
 
-Config lives at `~/.config/kilo/kilo.conf.toml`. Created automatically on first run.
+Config lives at `~/.config/reedo/reedo.conf.toml`. Created automatically on first run.
 
 ```toml
 indent_size = 4
 use_spaces = true
 autosave_delay_ms = 500
 horizontal_padding = 0
-theme = "kilo-dark"
+theme = "reedo-dark"
 ```
 
 ## Custom Themes
 
-Create a `.toml` file in `~/.config/kilo/themes/`:
+Create a `.toml` file in `~/.config/reedo/themes/`:
 
 ```toml
 name = "my-theme"

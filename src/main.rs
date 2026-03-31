@@ -34,7 +34,7 @@ use ui::tree::FileTreeWidget;
 use ui::welcome::WelcomeScreen;
 
 #[derive(Parser)]
-#[command(name = "kilo", about = "A minimal terminal text editor")]
+#[command(name = "reedo", about = "A minimal terminal text editor")]
 struct Cli {
     file: Option<String>,
 
@@ -77,14 +77,14 @@ fn file_tree_popup_area(full_area: Rect) -> Rect {
 }
 
 fn init_logging() {
-    if std::env::var("KILO_LOG").is_ok() {
-        let file_appender = tracing_appender::rolling::never("/tmp", "kilo-debug.log");
+    if std::env::var("REEDO_LOG").is_ok() {
+        let file_appender = tracing_appender::rolling::never("/tmp", "reedo-debug.log");
         tracing_subscriber::fmt()
             .with_writer(file_appender)
-            .with_env_filter("kilo=debug")
+            .with_env_filter("reedo=debug")
             .with_ansi(false)
             .init();
-        tracing::info!("kilo logging initialized");
+        tracing::info!("reedo logging initialized");
     }
 }
 

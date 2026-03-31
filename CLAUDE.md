@@ -1,4 +1,4 @@
-# Kilo — AI Instructions
+# Reedo — AI Instructions
 
 ## Core Beliefs
 

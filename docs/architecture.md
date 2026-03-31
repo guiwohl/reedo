@@ -2,7 +2,7 @@
 
 ## Overview
 
-Kilo is a single-binary TUI text editor. The event loop runs in `main.rs`, delegates input to the editor module or popup handlers, and renders via ratatui.
+Reedo is a single-binary TUI text editor. The event loop runs in `main.rs`, delegates input to the editor module or popup handlers, and renders via ratatui.
 
 ```
 main.rs (event loop + rendering)

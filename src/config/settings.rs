@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-const DEFAULT_CONFIG: &str = r##"# ─── kilo configuration ───────────────────────────────────────
-# location: ~/.config/kilo/kilo.conf.toml
-# open this file in kilo with ctrl+,
+const DEFAULT_CONFIG: &str = r##"# ─── reedo configuration ──────────────────────────────────────
+# location: ~/.config/reedo/reedo.conf.toml
+# open this file in reedo with ctrl+,
 
 # ─── editing ──────────────────────────────────────────────────
 
@@ -23,10 +23,10 @@ const DEFAULT_CONFIG: &str = r##"# ─── kilo configuration ─────�
 # horizontal padding (chars) between gutter and text / text and edge
 # horizontal_padding = 4
 
-# color theme — bundled: kilo-dark, kilo-light, catppuccin,
+# color theme — bundled: reedo-dark, reedo-light, catppuccin,
 #   dracula, gruvbox, nord, rose-pine, solarized-dark
-# custom: drop a .toml in ~/.config/kilo/themes/
-# theme = "kilo-dark"
+# custom: drop a .toml in ~/.config/reedo/themes/
+# theme = "reedo-dark"
 "##;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,7 +56,7 @@ fn default_horizontal_padding() -> usize {
     4
 }
 fn default_theme() -> String {
-    "kilo-dark".to_string()
+    "reedo-dark".to_string()
 }
 
 impl Default for Settings {
@@ -75,8 +75,8 @@ impl Settings {
     pub fn config_path() -> PathBuf {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
-            .join("kilo");
-        config_dir.join("kilo.conf.toml")
+            .join("reedo");
+        config_dir.join("reedo.conf.toml")
     }
 
     pub fn load() -> Self {

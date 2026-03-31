@@ -26,7 +26,7 @@ impl ThemeSwitcherState {
         // also scan custom themes dir
         let theme_dir = dirs::config_dir()
             .unwrap_or_else(|| std::path::PathBuf::from("~/.config"))
-            .join("kilo")
+            .join("reedo")
             .join("themes");
         if theme_dir.exists() {
             if let Ok(entries) = std::fs::read_dir(&theme_dir) {

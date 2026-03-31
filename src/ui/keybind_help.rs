@@ -37,6 +37,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
         "Normal Mode",
         &[
             ("i", "enter insert mode"),
+            ("e", "open file explorer"),
             ("dd", "delete (cut) entire line"),
             ("yy", "yank (copy) entire line"),
             ("p", "paste yanked line below"),
@@ -78,12 +79,13 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
     (
         "Files & UI",
         &[
+            ("e", "open file explorer"),
             ("Ctrl+E", "toggle file explorer"),
             ("Ctrl+P", "fuzzy file finder"),
             ("Ctrl+T", "switch theme"),
             ("Ctrl+,", "open config file"),
             ("Ctrl+S", "save file"),
-            ("Ctrl+Q", "quit kilo"),
+            ("Ctrl+Q", "quit reedo"),
             ("F1 / ?", "show this help"),
         ],
     ),

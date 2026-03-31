@@ -1,9 +1,9 @@
-the idea is simple: Kilo, a rust-build (for velocity) terminal text editor, that will be "a son of fresh and neovim", but simpler than both of them. Here is the initial mvp criteria:
+the idea is simple: Reedo, a rust-build (for velocity) terminal text editor, that will be "a son of fresh and neovim", but simpler than both of them. Here is the initial mvp criteria:
 
 - Being able to edit text
 - Auto-closing brackets and similars "", '', (), [], {}, <>, ``
 - Perfectly done sintax highlighting colors and boldness when necessary, mostly for: **markdown**, **php (laravel, i think it is the same right)**, python, typescript, javascript, css, html, rust, c, sql, git things, .env files, and shell.
-- A TOML file for configuration of simple things. (should be at: "~/.config/kilo/kilo.conf.toml")
+- A TOML file for configuration of simple things. (should be at: "~/.config/reedo/reedo.conf.toml")
 - Autosave by default, at .5s of delay.
 - A pop-up project tree, with nice nerd-icons usage, and git indicators (like: A, U, M.......), and a different thing: each folder will have a color, and the files inside that folder will follow that same color all along. The pop-up should use almost every vertical space of the term screen, and the horizontality should be determined... Also, there should be nice identation between folders and files, so the user is able to determine what is from where, get it? focus really well on the devex.
 - A Basic theming system. 
