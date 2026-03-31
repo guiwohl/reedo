@@ -21,7 +21,7 @@ reedo src/main.rs       # open with project context
 - **Vim-inspired modes** — Normal and Insert, no complexity
 - **Syntax highlighting** — 17 languages via tree-sitter + custom markdown highlighter
 - **Mouse support** — click to place cursor, drag to select, scroll wheel navigation
-- **File explorer** (Ctrl+E) — centered tree modal with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo (Ctrl+Z)
+- **File explorer** (Ctrl+E) — centered tree modal with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo/redo (Ctrl+Z / Ctrl+Y)
 - **Fuzzy file finder** (Ctrl+P) — type to search, instant open
 - **Search & replace** — in-file (Ctrl+F / Ctrl+H) and project-wide (Ctrl+Shift+F / Ctrl+Shift+H) with one-by-one approval
 - **8 bundled themes** — reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
@@ -95,6 +95,7 @@ Press **F1** or **?** in normal mode for the full keybind reference.
 
 | Key | Action |
 |---|---|
+| Ctrl+Z / Ctrl+Y | Undo / redo filesystem operations |
 | `n` | New file |
 | `f` | New folder |
 | `r` | Rename |

@@ -505,7 +505,7 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             ));
             let visible = crate::ui::tree::tree_list_height(tree_area, false);
 
-            // ctrl+z: undo filesystem ops in tree, then buffer ops
+            // ctrl+z / ctrl+y: tree filesystem undo/redo first, then buffer history
             if ctrl && key.code == KeyCode::Char('z') {
                 if !app.tree_state.fs_undo_stack.is_empty() {
                     app.tree_state.undo_last_fs_op();
@@ -516,7 +516,9 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                 return;
             }
             if ctrl && key.code == KeyCode::Char('y') {
-                if let Some(pos) = app.buffer.apply_redo() {
+                if !app.tree_state.fs_redo_stack.is_empty() {
+                    app.tree_state.redo_last_fs_op();
+                } else if let Some(pos) = app.buffer.apply_redo() {
                     app.cursor.move_to(pos.line, pos.col, false);
                     app.cursor.update_desired_col();
                 }

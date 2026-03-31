@@ -97,6 +97,7 @@
 
 | Key | Action |
 |---|---|
+| Ctrl+Z / Ctrl+Y | Undo / redo filesystem operations |
 | Up / Down | Navigate entries |
 | Enter / Right | Open file / expand folder |
 | Left | Collapse folder |

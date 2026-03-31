@@ -95,6 +95,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
             ("Up / Down", "navigate entries"),
             ("Enter / Right", "open file / expand folder"),
             ("Left", "collapse folder"),
+            ("Ctrl+Z / Ctrl+Y", "undo / redo filesystem ops"),
             ("n", "create new file"),
             ("f", "create new folder"),
             ("r", "rename selected"),

@@ -59,9 +59,9 @@ Open with **Ctrl+E**. Toggle to close.
 
 Files show their git status character after the name (M, A, D, ?, etc) with color coding.
 
-## Filesystem Undo (Ctrl+Z)
+## Filesystem Undo/Redo (Ctrl+Z / Ctrl+Y)
 
-When the file explorer is open, Ctrl+Z undoes the last filesystem operation (create, rename, move, delete). The undo stack is per-session. If the undo stack is empty, Ctrl+Z falls through to buffer undo.
+When the file explorer is open, Ctrl+Z undoes the last filesystem operation (create, rename, move, delete), and Ctrl+Y redoes the most recently undone one. The history is per-session. Any new filesystem operation clears the tree redo stack. If the tree history is empty, Ctrl+Z and Ctrl+Y fall through to buffer undo/redo.
 
 ## State Persistence
 

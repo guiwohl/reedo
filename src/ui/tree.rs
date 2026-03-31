@@ -47,6 +47,7 @@ pub struct TreeState {
     pub input_buf: String,
     pub marked_for_move: Option<PathBuf>,
     pub fs_undo_stack: Vec<FsOperation>,
+    pub fs_redo_stack: Vec<FsOperation>,
     folder_color_idx: usize,
 }
 
@@ -78,6 +79,11 @@ impl Default for TreeAction {
 }
 
 impl TreeState {
+    fn push_fs_op(&mut self, op: FsOperation) {
+        self.fs_undo_stack.push(op);
+        self.fs_redo_stack.clear();
+    }
+
     pub fn build(&mut self, root: &Path) {
         self.root = Some(root.to_path_buf());
         self.entries.clear();
@@ -275,7 +281,7 @@ impl TreeState {
             self.cancel_action();
             return None;
         }
-        self.fs_undo_stack.push(FsOperation::Create {
+        self.push_fs_op(FsOperation::Create {
             path: new_path.clone(),
             is_dir: false,
         });
@@ -294,7 +300,7 @@ impl TreeState {
         let parent = self.selected_dir();
         let new_path = parent.join(&self.input_buf);
         let _ = std::fs::create_dir_all(&new_path);
-        self.fs_undo_stack.push(FsOperation::Create {
+        self.push_fs_op(FsOperation::Create {
             path: new_path.clone(),
             is_dir: true,
         });
@@ -318,7 +324,7 @@ impl TreeState {
                 .unwrap_or(Path::new("."))
                 .join(&self.input_buf);
             if std::fs::rename(&old_path, &new_path).is_ok() {
-                self.fs_undo_stack.push(FsOperation::Rename {
+                self.push_fs_op(FsOperation::Rename {
                     from: old_path,
                     to: new_path.clone(),
                 });
@@ -349,7 +355,7 @@ impl TreeState {
                 std::fs::remove_file(&path)
             };
             if result.is_ok() {
-                self.fs_undo_stack.push(FsOperation::Delete {
+                self.push_fs_op(FsOperation::Delete {
                     path: path.clone(),
                     content,
                     is_dir,
@@ -385,7 +391,7 @@ impl TreeState {
             return None; // same location, skip
         }
         if std::fs::rename(&marked, &new_path).is_ok() {
-            self.fs_undo_stack.push(FsOperation::Move {
+            self.push_fs_op(FsOperation::Move {
                 from: marked,
                 to: new_path.clone(),
             });
@@ -405,35 +411,69 @@ impl TreeState {
             Some(op) => op,
             None => return false,
         };
-        let ok = match op {
-            FsOperation::Move { from, to } => std::fs::rename(&to, &from).is_ok(),
-            FsOperation::Create { ref path, is_dir } => {
-                if is_dir {
-                    std::fs::remove_dir_all(path).is_ok()
-                } else {
-                    std::fs::remove_file(path).is_ok()
-                }
-            }
-            FsOperation::Delete {
-                ref path,
-                ref content,
-                is_dir,
-            } => {
-                if is_dir {
-                    std::fs::create_dir_all(path).is_ok()
-                } else {
-                    let data = content.as_deref().unwrap_or("");
-                    std::fs::write(path, data).is_ok()
-                }
-            }
-            FsOperation::Rename { from, to } => std::fs::rename(&to, &from).is_ok(),
-        };
+        let ok = self.apply_fs_op(&op, true);
         if ok {
+            self.fs_redo_stack.push(op);
             if let Some(root) = self.root.clone() {
                 self.build(&root);
             }
         }
         ok
+    }
+
+    pub fn redo_last_fs_op(&mut self) -> bool {
+        let op = match self.fs_redo_stack.pop() {
+            Some(op) => op,
+            None => return false,
+        };
+        let ok = self.apply_fs_op(&op, false);
+        if ok {
+            self.fs_undo_stack.push(op);
+            if let Some(root) = self.root.clone() {
+                self.build(&root);
+            }
+        }
+        ok
+    }
+
+    fn apply_fs_op(&mut self, op: &FsOperation, reverse: bool) -> bool {
+        match op {
+            FsOperation::Move { from, to } | FsOperation::Rename { from, to } => {
+                let (src, dest) = if reverse { (to, from) } else { (from, to) };
+                std::fs::rename(src, dest).is_ok()
+            }
+            FsOperation::Create { path, is_dir } => {
+                if reverse {
+                    if *is_dir {
+                        std::fs::remove_dir_all(path).is_ok()
+                    } else {
+                        std::fs::remove_file(path).is_ok()
+                    }
+                } else if *is_dir {
+                    std::fs::create_dir_all(path).is_ok()
+                } else {
+                    std::fs::write(path, "").is_ok()
+                }
+            }
+            FsOperation::Delete {
+                path,
+                content,
+                is_dir,
+            } => {
+                if reverse {
+                    if *is_dir {
+                        std::fs::create_dir_all(path).is_ok()
+                    } else {
+                        let data = content.as_deref().unwrap_or("");
+                        std::fs::write(path, data).is_ok()
+                    }
+                } else if *is_dir {
+                    std::fs::remove_dir_all(path).is_ok()
+                } else {
+                    std::fs::remove_file(path).is_ok()
+                }
+            }
+        }
     }
 
     fn selected_dir(&self) -> PathBuf {
