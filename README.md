@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo/logo-with-text.png" alt="Reedo logo" width="320" />
+<img src="assets/logo/main-logo.png" alt="Reedo logo" width="320" />
 
 # reedo
 
