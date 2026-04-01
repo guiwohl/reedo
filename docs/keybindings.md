@@ -105,6 +105,8 @@
 | f | Create new folder |
 | r | Rename selected |
 | d | Delete selected |
+| c | Copy selected relative path |
+| C | Copy selected full path |
 | m | Mark for move |
 | m / Enter on folder | Confirm move to folder |
 | Esc | Cancel move / close explorer |

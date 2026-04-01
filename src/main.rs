@@ -21,6 +21,7 @@ use ratatui::Terminal;
 
 use app::{App, Popup};
 use config::settings::Settings;
+use editor::clipboard;
 use ui::fuzzy::FuzzyFinderWidget;
 use ui::keybind_help::KeybindHelpWidget;
 use ui::render::EditorView;
@@ -651,6 +652,18 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                 }
                 KeyCode::Char('n') if !ctrl => {
                     app.tree_state.start_action(TreeAction::NewFile);
+                }
+                KeyCode::Char('c') if !ctrl && !shift => {
+                    if let Some(path) = app.tree_state.selected_relative_path() {
+                        clipboard::copy_to_clipboard(&path);
+                        app.flash(format!("copied relative path: {}", path));
+                    }
+                }
+                KeyCode::Char('C') if !ctrl => {
+                    if let Some(path) = app.tree_state.selected_full_path() {
+                        clipboard::copy_to_clipboard(&path);
+                        app.flash(format!("copied full path: {}", path));
+                    }
                 }
                 KeyCode::Char('f') if !ctrl => {
                     app.tree_state.start_action(TreeAction::NewFolder);

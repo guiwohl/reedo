@@ -252,6 +252,21 @@ impl TreeState {
         self.entries.get(self.selected).map(|e| &e.path)
     }
 
+    pub fn selected_relative_path(&self) -> Option<String> {
+        let entry = self.selected_entry()?;
+        let root = self.root.as_ref()?;
+        match entry.path.strip_prefix(root) {
+            Ok(rel) if rel.as_os_str().is_empty() => Some(".".to_string()),
+            Ok(rel) => Some(rel.display().to_string()),
+            Err(_) => None,
+        }
+    }
+
+    pub fn selected_full_path(&self) -> Option<String> {
+        self.selected_entry()
+            .map(|entry| entry.path.display().to_string())
+    }
+
     pub fn start_action(&mut self, action: TreeAction) {
         self.action = action;
         self.input_buf.clear();
@@ -517,6 +532,72 @@ fn file_icon(name: &str, is_dir: bool, is_open: bool) -> &'static str {
         "txt" => "\u{f15c}  ",                 // nf-fa-file_text
         "gitignore" => "\u{e702}  ",           // nf-dev-git
         _ => "\u{f15b}  ",                     // nf-fa-file
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TreeEntry, TreeState};
+    use ratatui::style::Color;
+    use std::path::PathBuf;
+
+    #[test]
+    fn selected_relative_path_returns_dot_for_root() {
+        let root = PathBuf::from("/tmp/reedo");
+        let mut state = TreeState {
+            root: Some(root.clone()),
+            entries: vec![TreeEntry {
+                path: root,
+                name: "reedo".to_string(),
+                is_dir: true,
+                depth: 0,
+                color: Color::Reset,
+                git_status: None,
+            }],
+            ..TreeState::default()
+        };
+
+        state.selected = 0;
+
+        assert_eq!(state.selected_relative_path().as_deref(), Some("."));
+    }
+
+    #[test]
+    fn selected_relative_path_returns_path_below_root() {
+        let root = PathBuf::from("/tmp/reedo");
+        let child = root.join("src/main.rs");
+        let state = TreeState {
+            root: Some(root),
+            entries: vec![
+                TreeEntry {
+                    path: PathBuf::from("/tmp/reedo"),
+                    name: "reedo".to_string(),
+                    is_dir: true,
+                    depth: 0,
+                    color: Color::Reset,
+                    git_status: None,
+                },
+                TreeEntry {
+                    path: child.clone(),
+                    name: "main.rs".to_string(),
+                    is_dir: false,
+                    depth: 1,
+                    color: Color::Reset,
+                    git_status: None,
+                },
+            ],
+            selected: 1,
+            ..TreeState::default()
+        };
+
+        assert_eq!(
+            state.selected_relative_path().as_deref(),
+            Some("src/main.rs")
+        );
+        assert_eq!(
+            state.selected_full_path().as_deref(),
+            Some(child.to_str().unwrap())
+        );
     }
 }
 

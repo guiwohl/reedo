@@ -29,6 +29,8 @@ Open with **Ctrl+E**. Toggle to close.
 | `f` | New folder — type name, Enter to confirm |
 | `r` | Rename — type new name, Enter to confirm |
 | `d` | Delete — confirm with `y`, cancel with `n` |
+| `c` | Copy selected item's path relative to project root |
+| `C` | Copy selected item's full path |
 
 ## Moving Files
 

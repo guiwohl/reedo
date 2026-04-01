@@ -1,16 +1,6 @@
 <div align="center">
 
-<!-- Replace this block with the final logo asset when it exists. -->
-
-<table>
-  <tr>
-    <td align="center">
-      <pre>(o&lt;  -- Reedo!
-//\
-V_/_</pre>
-    </td>
-  </tr>
-</table>
+<img src="assets/logo/logo-with-text.png" alt="Reedo logo" width="320" />
 
 # reedo
 
@@ -47,17 +37,17 @@ reedo is a single-binary TUI editor for people who want a cleaner workflow than 
 <table>
   <tr>
     <td align="center">
-      <img src="printscreens/landing-screen.png" alt="Reedo landing screen" width="100%" />
+      <img src="assets/screenshots/landing-screen.png" alt="Reedo landing screen" width="100%" />
       <br />
       <strong>Landing screen</strong>
     </td>
     <td align="center">
-      <img src="printscreens/editor.png" alt="Reedo editor view" width="100%" />
+      <img src="assets/screenshots/editor.png" alt="Reedo editor view" width="100%" />
       <br />
       <strong>Editor</strong>
     </td>
     <td align="center">
-      <img src="printscreens/file-tree.png" alt="Reedo file tree" width="100%" />
+      <img src="assets/screenshots/file-tree.png" alt="Reedo file tree" width="100%" />
       <br />
       <strong>File tree</strong>
     </td>
