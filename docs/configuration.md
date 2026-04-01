@@ -27,7 +27,7 @@ autosave_delay_ms = 500
 horizontal_padding = 4
 
 # color theme name
-# bundled: reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
+# bundled: Default, reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
 # custom: drop a .toml in ~/.config/reedo/themes/
 theme = "reedo-dark"
 ```

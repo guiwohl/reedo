@@ -18,8 +18,8 @@ impl<'a> Widget for EditorView<'a> {
         let theme_fg = t.fg();
         let theme_gutter = t.gutter();
         let theme_selection = t.selection();
-        let theme_cursor_bg = Color::Rgb(249, 226, 175);
-        let theme_cursor_fg = Color::Rgb(24, 24, 37);
+        let theme_cursor_bg = t.cursor_bg();
+        let theme_cursor_fg = t.cursor_fg();
 
         // fill entire editor area with theme background
         for y in area.y..area.y + area.height {

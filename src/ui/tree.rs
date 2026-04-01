@@ -750,6 +750,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
         // action input at bottom
         if self.state.action != TreeAction::None {
             let action_y = inner.y + inner.height - 1;
+            let action_bg = self.theme.popup_selected();
             let label = match self.state.action {
                 TreeAction::NewFile => " new file: ",
                 TreeAction::NewFolder => " new folder: ",
@@ -762,7 +763,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
             for lx in inner.x..inner.x + inner.width {
                 buf.cell_mut((lx, action_y)).map(|cell| {
                     cell.set_char(' ');
-                    cell.set_style(Style::default().bg(Color::Rgb(45, 45, 65)));
+                    cell.set_style(Style::default().bg(action_bg));
                 });
             }
 
@@ -772,13 +773,9 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     break;
                 }
                 let style = if ci < label.len() {
-                    Style::default()
-                        .fg(Color::Rgb(249, 226, 175))
-                        .bg(Color::Rgb(45, 45, 65))
+                    Style::default().fg(accent).bg(action_bg)
                 } else {
-                    Style::default()
-                        .fg(Color::Rgb(192, 202, 245))
-                        .bg(Color::Rgb(45, 45, 65))
+                    Style::default().fg(self.theme.fg()).bg(action_bg)
                 };
                 buf.cell_mut((cx, action_y)).map(|cell| {
                     cell.set_char(ch);

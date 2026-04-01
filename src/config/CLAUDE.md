@@ -7,7 +7,7 @@ Settings and theming system.
 | File | Purpose |
 |---|---|
 | `settings.rs` | TOML config loading from `~/.config/reedo/reedo.conf.toml`. Creates a commented default on first run. All fields have serde defaults so partial configs work. |
-| `theme.rs` | Theme struct with hex color fields. 8 bundled themes. `load_theme()` checks custom dir first, falls back to bundled. `parse_hex_color()` converts hex strings to ratatui Color. |
+| `theme.rs` | Theme struct with string color fields. 9 bundled themes including `Default`. `load_theme()` checks custom dir first, falls back to bundled. `parse_theme_color()` converts hex strings, terminal defaults, and ANSI names to ratatui Color. |
 
 ## Config Path
 

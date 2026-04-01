@@ -1,157 +1,149 @@
+<div align="center">
+
+<!-- Replace this block with the final logo asset when it exists. -->
+
+<table>
+  <tr>
+    <td align="center">
+      <pre>(o&lt;  -- Reedo!
+//\
+V_/_</pre>
+    </td>
+  </tr>
+</table>
+
 # reedo
 
-A minimal terminal text editor built in Rust. Son of fresh and neovim, but simpler than both.
+A minimal terminal text editor built in Rust.
 
-## Install
+Fast to open, focused to use, and opinionated enough to stay out of your way.
+
+Created by [@guiwohl](https://github.com/guiwohl)
+
+</div>
+
+reedo is a single-binary TUI editor for people who want a cleaner workflow than a full IDE, but more structure than a bare terminal prompt. It combines modal editing, project navigation, search and replace, git context, and theme support in a compact terminal-first interface.
+
+## Why reedo
+
+- Minimal by design: one focused editor, one clear workflow, no tabs or plugin sprawl
+- Fast to grasp: normal mode and insert mode, with practical shortcuts and on-screen help
+- Project-aware: file tree, fuzzy finder, project search, project replace, and git status
+- Pleasant in the terminal: mouse support, live theme switching, syntax highlighting, and a simple welcome screen
+- Configurable without ceremony: TOML config plus drop-in custom themes
+
+## Highlights
+
+- Vim-inspired modes with clean, limited surface area
+- Syntax highlighting for 17 languages via tree-sitter plus custom Markdown highlighting
+- File explorer with Nerd Font icons, git indicators, CRUD operations, and filesystem undo/redo
+- Fuzzy file finder, in-file search, in-file replace, project search, and project replace
+- 9 bundled themes including `Default`, which can inherit terminal default colors
+- Live theme switcher with persistence to config
+- Autosave, system clipboard support, mouse selection, and external file reload detection
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="printscreens/landing-screen.png" alt="Reedo landing screen" width="100%" />
+      <br />
+      <strong>Landing screen</strong>
+    </td>
+    <td align="center">
+      <img src="printscreens/editor.png" alt="Reedo editor view" width="100%" />
+      <br />
+      <strong>Editor</strong>
+    </td>
+    <td align="center">
+      <img src="printscreens/file-tree.png" alt="Reedo file tree" width="100%" />
+      <br />
+      <strong>File tree</strong>
+    </td>
+  </tr>
+</table>
+
+## Installation
+
+### Requirements
+
+- Rust toolchain with `cargo`
+- `git` if you want branch and diff gutter information inside the UI
+- A terminal with Unicode and 256-color support; truecolor is recommended
+- A Nerd Font if you want the file tree icons to render cleanly
+
+Optional on Linux:
+
+- `wl-clipboard` on Wayland for clipboard integration
+- `xclip` or `xsel` on X11 for clipboard integration
+
+### Rust setup
+
+Cross-distro:
 
 ```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+rustup default stable
+```
+
+Ubuntu / Debian:
+
+```bash
+sudo apt update
+sudo apt install -y git build-essential pkg-config rustc cargo
+```
+
+Fedora:
+
+```bash
+sudo dnf install -y git gcc pkgconf rust cargo
+```
+
+Arch Linux:
+
+```bash
+sudo pacman -S --needed git base-devel rustup
+rustup default stable
+```
+
+openSUSE:
+
+```bash
+sudo zypper install -y git gcc pkg-config rust cargo
+```
+
+### Install reedo
+
+```bash
+git clone https://github.com/guiwohl/reedo.git
+cd reedo
 cargo install --path .
 ```
 
-## Usage
+## Basic usage
 
 ```bash
-reedo                   # open with welcome screen
-reedo file.rs           # open a file
-reedo src/main.rs       # open with project context
+reedo
+reedo file.rs
+reedo src/main.rs
 ```
 
-## Features
+## Documentation
 
-- **Vim-inspired modes** — Normal and Insert, no complexity
-- **Syntax highlighting** — 17 languages via tree-sitter + custom markdown highlighter
-- **Mouse support** — click to place cursor, drag to select, scroll wheel navigation
-- **File explorer** (Ctrl+E) — centered tree modal with nerd font icons, git indicators, folder colors, CRUD operations, move files, filesystem undo/redo (Ctrl+Z / Ctrl+Y)
-- **Fuzzy file finder** (Ctrl+P) — type to search, instant open
-- **Search & replace** — in-file (Ctrl+F / Ctrl+H) and project-wide (Ctrl+Shift+F / Ctrl+Shift+H) with one-by-one approval
-- **8 bundled themes** — reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
-- **Theme switcher** (Ctrl+T) — live preview with color dots, persists to config
-- **Custom themes** — drop a `.toml` in `~/.config/reedo/themes/`
-- **Git integration** — branch, changed/staged/ahead/behind in statusbar, file status in tree, gutter marks for additions/modifications/deletions
-- **Flash notifications** — transient status messages (save, reload, theme switch) in the statusbar
-- **External file reload** — detects changes made outside the editor and reloads automatically
-- **Auto-close brackets** — `()` `[]` `{}` `<>` `""` `''` ` `` `
-- **Smart indent** — auto-indent after `{`, `(`, `[`, `:`
-- **Autosave** — debounced, 500ms after last edit
-- **System clipboard** — Ctrl+C/V/X
-- **TOML config** — `~/.config/reedo/reedo.conf.toml`
+Use the README as the landing page. Everything more detailed lives in `docs/`.
 
-## Keybindings
-
-Press **F1** or **?** in normal mode for the full keybind reference.
-
-### Modes
-
-| Key | Action |
+| Topic | Link |
 |---|---|
-| `i` / `Insert` | Enter insert mode |
-| `Esc` | Normal mode / close popup |
-
-### Navigation
-
-| Key | Action |
-|---|---|
-| Arrow keys | Move cursor |
-| Ctrl+Left/Right | Jump words |
-| Ctrl+Alt+Up/Down | Jump paragraphs |
-| PgUp / PgDn | Jump paragraphs |
-| Ctrl+Home / Ctrl+End | Top / bottom of file |
-| Shift+Arrows | Select text |
-| Home / End | Start / end of line |
-| Mouse click | Place cursor |
-| Mouse drag | Select text |
-| Scroll wheel | Scroll up/down |
-
-### Normal Mode
-
-| Key | Action |
-|---|---|
-| `e` | File explorer |
-| `dd` | Delete (cut) line |
-| `yy` | Yank (copy) line |
-| `p` | Paste below |
-| `x` | Delete char |
-| `o` / `O` | New line below / above |
-
-### Files & UI
-
-| Key | Action |
-|---|---|
-| `e` | Open file explorer |
-| Ctrl+E | File explorer |
-| Ctrl+P | Fuzzy finder |
-| Ctrl+F | Search in file |
-| Ctrl+H | Find & replace |
-| Ctrl+Shift+F | Project search |
-| Ctrl+Shift+H | Project replace |
-| Ctrl+T | Switch theme (persists to config) |
-| F2 | Set horizontal padding |
-| Ctrl+, | Open config |
-| Ctrl+S | Save |
-| Ctrl+Z / Ctrl+Y | Undo / redo |
-| Ctrl+Q | Quit |
-
-### File Explorer
-
-| Key | Action |
-|---|---|
-| Ctrl+Z / Ctrl+Y | Undo / redo filesystem operations |
-| `n` | New file |
-| `f` | New folder |
-| `r` | Rename |
-| `d` | Delete |
-| `m` | Mark for move, then navigate to a folder and press Enter |
-| Ctrl+Z | Undo last filesystem operation |
-
-## Config
-
-Config lives at `~/.config/reedo/reedo.conf.toml`. Created automatically on first run.
-
-```toml
-indent_size = 4
-use_spaces = true
-autosave_delay_ms = 500
-horizontal_padding = 0
-theme = "reedo-dark"
-```
-
-## Custom Themes
-
-Create a `.toml` file in `~/.config/reedo/themes/`:
-
-```toml
-name = "my-theme"
-
-[colors]
-bg = "#1a1b26"
-fg = "#c0caf5"
-gutter = "#3b4261"
-cursor_bg = "#c0caf5"
-cursor_fg = "#1a1b26"
-selection = "#283457"
-statusbar_bg = "#1e1e2e"
-statusbar_fg = "#a6adc8"
-keyword = "#bb9af7"
-string = "#9ece6a"
-comment = "#565f89"
-function = "#7daeF7"
-type = "#2ac3de"
-number = "#ff9e64"
-operator = "#89ddff"
-property = "#73bac2"
-```
-
-## Stack
-
-| Crate | Purpose |
-|---|---|
-| crossterm | Terminal I/O + mouse events |
-| ratatui | TUI rendering |
-| ropey | Rope-based text buffer |
-| tree-sitter + 17 grammars | Syntax highlighting |
-| arboard | System clipboard |
-| serde + toml | Config |
-| ignore | File walking |
+| Configuration | [docs/configuration.md](docs/configuration.md) |
+| Theming | [docs/theming.md](docs/theming.md) |
+| Keybindings | [docs/keybindings.md](docs/keybindings.md) |
+| File explorer | [docs/file-explorer.md](docs/file-explorer.md) |
+| Git integration | [docs/git-integration.md](docs/git-integration.md) |
+| Syntax highlighting | [docs/syntax-highlighting.md](docs/syntax-highlighting.md) |
+| Architecture | [docs/architecture.md](docs/architecture.md) |
+| Dev mode | [docs/dev-mode.md](docs/dev-mode.md) |
 
 ## License
 

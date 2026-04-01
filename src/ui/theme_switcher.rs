@@ -181,7 +181,7 @@ impl<'a> Widget for ThemeSwitcherWidget<'a> {
                     cell.set_char('●');
                     cell.set_style(
                         Style::default()
-                            .fg(theme::parse_hex_color(color_hex))
+                            .fg(theme::parse_theme_color(color_hex))
                             .bg(line_bg),
                     );
                 });

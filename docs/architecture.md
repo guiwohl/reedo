@@ -41,7 +41,7 @@ Terminal Event → crossterm
 - **Ropey for text** — rope data structure for efficient insert/delete on large files.
 - **Tree-sitter for syntax** — 17 grammars compiled in. Markdown uses a custom char-based highlighter (tree-sitter-md removed due to C assertion crashes). `catch_unwind` protects against grammar panics.
 - **Popup layering** — `Popup` enum in App. Only one popup at a time. Esc closes popup first, then switches to normal mode.
-- **Theme from TOML** — colors are hex strings in ThemeColors, parsed to ratatui Color at render time via `parse_hex_color()`.
+- **Theme from TOML** — colors are symbolic strings in `ThemeColors`, parsed to ratatui `Color` at render time via `parse_theme_color()`. Themes can use hex RGB, terminal defaults, or ANSI color names.
 - **Git via CLI** — shells out to `git status --porcelain` and `git diff --unified=0`. Refreshes every 5 seconds.
 
 ## Rendering Pipeline

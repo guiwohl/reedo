@@ -3,11 +3,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
 
-const LOGO: &[&str] = &[
-    r"(o<  -- Reedo!",
-    r"//\",
-    r"V_/_ ",
-];
+const LOGO: &[&str] = &[r"(o<  -- Reedo!", r"//\", r"V_/_ "];
 
 const HINT: &str = "press F1 for keybindings";
 

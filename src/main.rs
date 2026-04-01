@@ -220,8 +220,8 @@ fn event_loop(
                 Popup::PaddingInput => {
                     // render a simple input bar
                     let bar_area = main_chunks[1];
-                    let bg = ratatui::style::Color::Rgb(30, 30, 46);
-                    let fg = ratatui::style::Color::Rgb(192, 202, 245);
+                    let bg = app.theme.statusbar_bg();
+                    let fg = app.theme.statusbar_fg();
                     frame.render_widget(
                         ratatui::widgets::Paragraph::new(format!(
                             " Horizontal padding: {}█",

@@ -47,38 +47,38 @@ impl Default for Highlighter {
 }
 
 fn capture_name_to_style(name: &str, tc: &crate::config::theme::ThemeColors) -> HighlightStyle {
-    use crate::config::theme::parse_hex_color;
+    use crate::config::theme::parse_theme_color;
     match name {
         "keyword" => HighlightStyle {
-            fg: parse_hex_color(&tc.keyword),
+            fg: parse_theme_color(&tc.keyword),
             bold: true,
         },
         "string" => HighlightStyle {
-            fg: parse_hex_color(&tc.string),
+            fg: parse_theme_color(&tc.string),
             bold: false,
         },
         "number" | "constant" => HighlightStyle {
-            fg: parse_hex_color(&tc.number),
+            fg: parse_theme_color(&tc.number),
             bold: false,
         },
         "comment" => HighlightStyle {
-            fg: parse_hex_color(&tc.comment),
+            fg: parse_theme_color(&tc.comment),
             bold: false,
         },
         "function" | "function.macro" => HighlightStyle {
-            fg: parse_hex_color(&tc.function),
+            fg: parse_theme_color(&tc.function),
             bold: false,
         },
         "type" => HighlightStyle {
-            fg: parse_hex_color(&tc.r#type),
+            fg: parse_theme_color(&tc.r#type),
             bold: false,
         },
         "property" => HighlightStyle {
-            fg: parse_hex_color(&tc.property),
+            fg: parse_theme_color(&tc.property),
             bold: false,
         },
         "operator" => HighlightStyle {
-            fg: parse_hex_color(&tc.operator),
+            fg: parse_theme_color(&tc.operator),
             bold: false,
         },
         "attribute" => HighlightStyle {
@@ -90,11 +90,11 @@ fn capture_name_to_style(name: &str, tc: &crate::config::theme::ThemeColors) -> 
             bold: false,
         },
         "variable" => HighlightStyle {
-            fg: parse_hex_color(&tc.fg),
+            fg: parse_theme_color(&tc.fg),
             bold: false,
         },
         _ => HighlightStyle {
-            fg: parse_hex_color(&tc.fg),
+            fg: parse_theme_color(&tc.fg),
             bold: false,
         },
     }

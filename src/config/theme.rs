@@ -125,33 +125,39 @@ impl Default for Theme {
 
 impl Theme {
     pub fn bg(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.bg)
+        parse_theme_color(&self.colors.bg)
     }
     pub fn fg(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.fg)
+        parse_theme_color(&self.colors.fg)
     }
     pub fn gutter(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.gutter)
+        parse_theme_color(&self.colors.gutter)
+    }
+    pub fn cursor_bg(&self) -> ratatui::style::Color {
+        parse_theme_color(&self.colors.cursor_bg)
+    }
+    pub fn cursor_fg(&self) -> ratatui::style::Color {
+        parse_theme_color(&self.colors.cursor_fg)
     }
     pub fn selection(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.selection)
+        parse_theme_color(&self.colors.selection)
     }
     pub fn statusbar_bg(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.statusbar_bg)
+        parse_theme_color(&self.colors.statusbar_bg)
     }
     pub fn statusbar_fg(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.statusbar_fg)
+        parse_theme_color(&self.colors.statusbar_fg)
     }
     pub fn comment(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.comment)
+        parse_theme_color(&self.colors.comment)
     }
     pub fn function(&self) -> ratatui::style::Color {
-        parse_hex_color(&self.colors.function)
+        parse_theme_color(&self.colors.function)
     }
 
     pub fn popup_bg(&self) -> ratatui::style::Color {
         // slightly lighter/darker than main bg for contrast
-        let c = parse_hex_color(&self.colors.bg);
+        let c = parse_theme_color(&self.colors.bg);
         match c {
             ratatui::style::Color::Rgb(r, g, b) => ratatui::style::Color::Rgb(
                 r.saturating_add(8),
@@ -179,8 +185,31 @@ impl Theme {
     }
 }
 
-pub fn parse_hex_color(hex: &str) -> ratatui::style::Color {
-    let hex = hex.trim_start_matches('#');
+pub fn parse_theme_color(value: &str) -> ratatui::style::Color {
+    let value = value.trim();
+    let normalized = value.to_ascii_lowercase();
+    match normalized.as_str() {
+        "default" | "reset" => return ratatui::style::Color::Reset,
+        "black" => return ratatui::style::Color::Black,
+        "red" => return ratatui::style::Color::Red,
+        "green" => return ratatui::style::Color::Green,
+        "yellow" => return ratatui::style::Color::Yellow,
+        "blue" => return ratatui::style::Color::Blue,
+        "magenta" => return ratatui::style::Color::Magenta,
+        "cyan" => return ratatui::style::Color::Cyan,
+        "white" | "gray" | "grey" => return ratatui::style::Color::Gray,
+        "bright-black" | "bright_black" => return ratatui::style::Color::DarkGray,
+        "bright-red" | "bright_red" => return ratatui::style::Color::LightRed,
+        "bright-green" | "bright_green" => return ratatui::style::Color::LightGreen,
+        "bright-yellow" | "bright_yellow" => return ratatui::style::Color::LightYellow,
+        "bright-blue" | "bright_blue" => return ratatui::style::Color::LightBlue,
+        "bright-magenta" | "bright_magenta" => return ratatui::style::Color::LightMagenta,
+        "bright-cyan" | "bright_cyan" => return ratatui::style::Color::LightCyan,
+        "bright-white" | "bright_white" => return ratatui::style::Color::White,
+        _ => {}
+    }
+
+    let hex = value.trim_start_matches('#');
     if hex.len() == 6 {
         if let (Ok(r), Ok(g), Ok(b)) = (
             u8::from_str_radix(&hex[0..2], 16),
@@ -195,6 +224,27 @@ pub fn parse_hex_color(hex: &str) -> ratatui::style::Color {
 
 pub fn bundled_themes() -> Vec<Theme> {
     vec![
+        Theme {
+            name: "Default".to_string(),
+            colors: ThemeColors {
+                bg: "default".into(),
+                fg: "default".into(),
+                gutter: "bright-black".into(),
+                cursor_bg: "#f9e2af".into(),
+                cursor_fg: "#1e1e2e".into(),
+                selection: "bright-black".into(),
+                statusbar_bg: "default".into(),
+                statusbar_fg: "default".into(),
+                keyword: "#bb9af7".into(),
+                string: "#9ece6a".into(),
+                comment: "bright-black".into(),
+                function: "#7daef7".into(),
+                r#type: "#2ac3de".into(),
+                number: "#ff9e64".into(),
+                operator: "#89ddff".into(),
+                property: "#73bac2".into(),
+            },
+        },
         Theme::default(), // reedo-dark
         Theme {
             name: "reedo-light".to_string(),
@@ -368,4 +418,44 @@ pub fn load_theme(name: &str) -> Theme {
         .into_iter()
         .find(|t| t.name == name)
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::style::Color;
+
+    use super::{bundled_themes, parse_theme_color};
+
+    #[test]
+    fn parses_hex_colors() {
+        assert_eq!(parse_theme_color("#1a2b3c"), Color::Rgb(0x1a, 0x2b, 0x3c));
+    }
+
+    #[test]
+    fn parses_terminal_default_color() {
+        assert_eq!(parse_theme_color("default"), Color::Reset);
+    }
+
+    #[test]
+    fn parses_ansi_color_names() {
+        assert_eq!(parse_theme_color("blue"), Color::Blue);
+        assert_eq!(parse_theme_color("bright-black"), Color::DarkGray);
+        assert_eq!(parse_theme_color("bright-white"), Color::White);
+    }
+
+    #[test]
+    fn invalid_tokens_fall_back_to_white() {
+        assert_eq!(parse_theme_color("definitely-not-a-color"), Color::White);
+    }
+
+    #[test]
+    fn includes_bundled_default_theme() {
+        let default_theme = bundled_themes()
+            .into_iter()
+            .find(|theme| theme.name == "Default")
+            .expect("bundled Default theme");
+
+        assert_eq!(default_theme.colors.bg, "default");
+        assert_eq!(default_theme.colors.statusbar_bg, "default");
+    }
 }

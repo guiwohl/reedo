@@ -23,8 +23,8 @@ const DEFAULT_CONFIG: &str = r##"# ─── reedo configuration ─────
 # horizontal padding (chars) between gutter and text / text and edge
 # horizontal_padding = 4
 
-# color theme — bundled: reedo-dark, reedo-light, catppuccin,
-#   dracula, gruvbox, nord, rose-pine, solarized-dark
+# color theme — bundled: Default, reedo-dark, reedo-light,
+#   catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
 # custom: drop a .toml in ~/.config/reedo/themes/
 # theme = "reedo-dark"
 "##;
