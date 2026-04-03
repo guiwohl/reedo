@@ -50,7 +50,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
     (
         "Clipboard (both modes)",
         &[
-            ("Ctrl+C", "copy selection to clipboard"),
+            ("Ctrl+C / Ctrl+Shift+C", "copy selection to clipboard"),
             ("Ctrl+X", "cut selection to clipboard"),
             ("Ctrl+V", "paste from clipboard"),
         ],
@@ -83,6 +83,7 @@ const SECTIONS: &[(&str, &[(&str, &str)])] = &[
             ("Ctrl+E", "toggle file explorer"),
             ("Ctrl+P", "fuzzy file finder"),
             ("Ctrl+T", "switch theme"),
+            ("F3", "toggle line wrapping"),
             ("Ctrl+,", "open config file"),
             ("Ctrl+S", "save file"),
             ("Ctrl+Q", "quit reedo"),

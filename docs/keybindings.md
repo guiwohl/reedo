@@ -49,7 +49,7 @@
 
 | Key | Action |
 |---|---|
-| Ctrl+C | Copy selection to system clipboard |
+| Ctrl+C / Ctrl+Shift+C | Copy selection to system clipboard |
 | Ctrl+X | Cut selection to system clipboard |
 | Ctrl+V | Paste from system clipboard |
 
@@ -88,6 +88,7 @@
 | Ctrl+P | Fuzzy file finder |
 | Ctrl+T | Switch theme (persists to config) |
 | F2 / Ctrl+] | Set horizontal padding |
+| F3 | Toggle line wrapping for current session |
 | Ctrl+, | Open config file |
 | Ctrl+S | Save file |
 | Ctrl+Q | Quit |

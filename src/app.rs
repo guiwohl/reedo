@@ -44,6 +44,7 @@ pub struct App {
     pub viewport_height: usize,
     pub viewport_width: usize,
     pub horizontal_padding: usize,
+    pub line_wrapping: bool,
     pub indent_size: usize,
     pub yank_buffer: Option<String>,
     pub last_edit_time: Option<Instant>,
@@ -84,6 +85,7 @@ impl App {
             viewport_height: 24,
             viewport_width: 80,
             horizontal_padding: settings.horizontal_padding,
+            line_wrapping: settings.line_wrapping,
             indent_size: settings.indent_size,
             autosave_delay_ms: settings.autosave_delay_ms,
             yank_buffer: None,
@@ -277,6 +279,11 @@ impl App {
         }
 
         // horizontal scroll
+        if self.line_wrapping {
+            self.viewport_left = 0;
+            return;
+        }
+
         let gutter_width = format!("{}", self.buffer.line_count()).len().max(3) + 1;
         let text_width = self
             .viewport_width

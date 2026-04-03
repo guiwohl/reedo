@@ -26,6 +26,9 @@ autosave_delay_ms = 500
 # also adjustable at runtime with Ctrl+]
 horizontal_padding = 4
 
+# wrap long lines to the editor width
+line_wrapping = true
+
 # color theme name
 # bundled: Default, reedo-dark, reedo-light, catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
 # custom: drop a .toml in ~/.config/reedo/themes/
@@ -49,6 +52,7 @@ Some settings can be changed without restarting reedo:
 |---|---|
 | Theme | Ctrl+T (theme switcher) — persists to config file |
 | Horizontal padding | F2 or Ctrl+] (type a number, Enter) |
+| Line wrapping | F3 (runtime only, does not persist) |
 
 Other settings require restarting reedo after editing the config file.
 

@@ -76,7 +76,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         }
 
         // clipboard: ctrl+c copy
-        KeyCode::Char('c') if ctrl => {
+        KeyCode::Char('c' | 'C') if ctrl => {
             if let Some(sel) = &app.cursor.selection {
                 let start = sel.start();
                 let end = sel.end();
@@ -171,6 +171,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::F(2) => {
             app.padding_input = app.horizontal_padding.to_string();
             app.popup = crate::app::Popup::PaddingInput;
+        }
+        KeyCode::F(3) => {
+            app.line_wrapping = !app.line_wrapping;
+            if app.line_wrapping {
+                app.viewport_left = 0;
+                app.flash("line wrapping on");
+            } else {
+                app.flash("line wrapping off");
+            }
         }
         // keybind help — multiple bindings to cover terminal differences
         KeyCode::Char('/') if ctrl => {

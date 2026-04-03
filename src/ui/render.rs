@@ -68,7 +68,7 @@ impl<'a> Widget for EditorView<'a> {
             Vec::new()
         };
 
-        let wrap_enabled = self.app.horizontal_padding > 1;
+        let wrap_enabled = self.app.line_wrapping;
         let tw = text_area_width as usize;
 
         // build screen rows: Vec<(file_line, char_offset)>
@@ -132,7 +132,7 @@ impl<'a> Widget for EditorView<'a> {
 
                 // text content
                 let line_text = self.app.buffer.line_text(file_line);
-                let scroll_col = if wrap_enabled {
+                let scroll_col = if wrap_enabled && tw > 0 {
                     char_offset
                 } else {
                     self.app.viewport_left
@@ -210,7 +210,7 @@ impl<'a> Widget for EditorView<'a> {
         let mut cursor_x = text_area_x;
         for (row, &(fl, co)) in screen_rows.iter().enumerate() {
             if fl == cursor_line {
-                let col_in_row = if wrap_enabled {
+                let col_in_row = if wrap_enabled && tw > 0 {
                     if cursor_col >= co && cursor_col < co + tw {
                         Some(cursor_col - co)
                     } else {

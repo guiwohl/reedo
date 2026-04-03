@@ -21,12 +21,15 @@ const DEFAULT_CONFIG: &str = r##"# ─── reedo configuration ─────
 # ─── appearance ───────────────────────────────────────────────
 
 # horizontal padding (chars) between gutter and text / text and edge
-# horizontal_padding = 4
+horizontal_padding = 4
+
+# wrap long lines to the editor width
+line_wrapping = true
 
 # color theme — bundled: Default, reedo-dark, reedo-light,
 #   catppuccin, dracula, gruvbox, nord, rose-pine, solarized-dark
 # custom: drop a .toml in ~/.config/reedo/themes/
-# theme = "reedo-dark"
+theme = "reedo-dark"
 "##;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +42,8 @@ pub struct Settings {
     pub autosave_delay_ms: u64,
     #[serde(default = "default_horizontal_padding")]
     pub horizontal_padding: usize,
+    #[serde(default = "default_line_wrapping")]
+    pub line_wrapping: bool,
     #[serde(default = "default_theme")]
     pub theme: String,
 }
@@ -55,6 +60,9 @@ fn default_autosave_delay_ms() -> u64 {
 fn default_horizontal_padding() -> usize {
     4
 }
+fn default_line_wrapping() -> bool {
+    true
+}
 fn default_theme() -> String {
     "reedo-dark".to_string()
 }
@@ -66,6 +74,7 @@ impl Default for Settings {
             use_spaces: default_use_spaces(),
             autosave_delay_ms: default_autosave_delay_ms(),
             horizontal_padding: default_horizontal_padding(),
+            line_wrapping: default_line_wrapping(),
             theme: default_theme(),
         }
     }
