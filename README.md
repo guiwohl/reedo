@@ -120,6 +120,24 @@ reedo file.rs
 reedo src/main.rs
 ```
 
+For shell completion, `reedo` can generate completion scripts:
+
+```bash
+mkdir -p ~/.zfunc
+reedo --generate-completion zsh > ~/.zfunc/_reedo
+```
+
+Then make sure `~/.zfunc` is added to `fpath` before `compinit` runs in your `.zshrc`, and restart your shell.
+
+If you installed `reedo` with `cargo install --path .`, the binary lives in `~/.cargo/bin`. Your user shell may see that path while `sudo` does not, so `sudo reedo /etc/hosts` can fail with `command not found`. Use the absolute binary path or preserve `PATH`, for example:
+
+```bash
+sudo "$(command -v reedo)" /etc/hosts
+sudo env "PATH=$PATH" reedo /etc/hosts
+```
+
+For one-off edits to privileged files, `sudoedit /etc/hosts` is usually the safer choice.
+
 ## Documentation
 
 Use the README as the landing page. Everything more detailed lives in `docs/`.

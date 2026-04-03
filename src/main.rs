@@ -9,7 +9,8 @@ use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser, ValueHint};
+use clap_complete::Shell;
 use crossterm::cursor::SetCursorStyle;
 use crossterm::event::MouseEventKind;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
@@ -37,7 +38,11 @@ use ui::welcome::WelcomeScreen;
 #[derive(Parser)]
 #[command(name = "reedo", about = "A minimal terminal text editor")]
 struct Cli {
+    #[arg(value_hint = ValueHint::AnyPath)]
     file: Option<String>,
+
+    #[arg(long, value_enum)]
+    generate_completion: Option<Shell>,
 
     #[arg(long, hide = true)]
     headless: bool,
@@ -92,6 +97,11 @@ fn init_logging() {
 fn main() -> io::Result<()> {
     init_logging();
     let cli = Cli::parse();
+
+    if let Some(shell) = cli.generate_completion {
+        return generate_completion(shell);
+    }
+
     let settings = Settings::load();
 
     if cli.headless {
@@ -99,6 +109,13 @@ fn main() -> io::Result<()> {
     }
 
     run_tui(cli, settings)
+}
+
+fn generate_completion(shell: Shell) -> io::Result<()> {
+    let mut cmd = Cli::command();
+    let bin_name = cmd.get_name().to_string();
+    clap_complete::generate(shell, &mut cmd, bin_name, &mut io::stdout());
+    Ok(())
 }
 
 fn run_tui(cli: Cli, settings: Settings) -> io::Result<()> {
@@ -509,19 +526,29 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             // ctrl+z / ctrl+y: tree filesystem undo/redo first, then buffer history
             if ctrl && key.code == KeyCode::Char('z') {
                 if !app.tree_state.fs_undo_stack.is_empty() {
-                    app.tree_state.undo_last_fs_op();
+                    if app.tree_state.undo_last_fs_op() {
+                        if let Some(ref git) = app.git_info {
+                            app.tree_state.apply_git_statuses(git);
+                        }
+                    }
                 } else if let Some(pos) = app.buffer.apply_undo() {
                     app.cursor.move_to(pos.line, pos.col, false);
                     app.cursor.update_desired_col();
+                    app.mark_edited();
                 }
                 return;
             }
             if ctrl && key.code == KeyCode::Char('y') {
                 if !app.tree_state.fs_redo_stack.is_empty() {
-                    app.tree_state.redo_last_fs_op();
+                    if app.tree_state.redo_last_fs_op() {
+                        if let Some(ref git) = app.git_info {
+                            app.tree_state.apply_git_statuses(git);
+                        }
+                    }
                 } else if let Some(pos) = app.buffer.apply_redo() {
                     app.cursor.move_to(pos.line, pos.col, false);
                     app.cursor.update_desired_col();
+                    app.mark_edited();
                 }
                 return;
             }

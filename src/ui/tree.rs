@@ -422,12 +422,13 @@ impl TreeState {
     }
 
     pub fn undo_last_fs_op(&mut self) -> bool {
-        let op = match self.fs_undo_stack.pop() {
+        let op = match self.fs_undo_stack.last().cloned() {
             Some(op) => op,
             None => return false,
         };
         let ok = self.apply_fs_op(&op, true);
         if ok {
+            self.fs_undo_stack.pop();
             self.fs_redo_stack.push(op);
             if let Some(root) = self.root.clone() {
                 self.build(&root);
@@ -437,12 +438,13 @@ impl TreeState {
     }
 
     pub fn redo_last_fs_op(&mut self) -> bool {
-        let op = match self.fs_redo_stack.pop() {
+        let op = match self.fs_redo_stack.last().cloned() {
             Some(op) => op,
             None => return false,
         };
         let ok = self.apply_fs_op(&op, false);
         if ok {
+            self.fs_redo_stack.pop();
             self.fs_undo_stack.push(op);
             if let Some(root) = self.root.clone() {
                 self.build(&root);
