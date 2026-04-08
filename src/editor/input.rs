@@ -134,8 +134,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // ctrl+shift+e: toggle side panel
-        KeyCode::Char('E') if ctrl_shift => {
+        // F4: toggle side panel
+        KeyCode::F(4) => {
             app.side_panel_open = !app.side_panel_open;
             if app.side_panel_open {
                 match app.app_mode {
