@@ -90,21 +90,41 @@ impl<'a> Widget for StatusBar<'a> {
             x += 1;
         }
 
-        // flash message — right-aligned, visible for 2.5s
+        // right side: app mode badge + flash message
+        let app_mode_str = format!(" {} ", self.app.app_mode.label());
+        let app_mode_fg = match self.app.app_mode {
+            crate::app::AppMode::Editor => Color::Rgb(148, 226, 213), // teal
+            crate::app::AppMode::Git => Color::Rgb(250, 179, 135),    // peach/orange
+        };
+
+        // render app mode badge on the far right
+        let mode_start_x = area.x + area.width - app_mode_str.len() as u16;
+        let mut mx = mode_start_x;
+        for ch in app_mode_str.chars() {
+            if mx >= area.x + area.width {
+                break;
+            }
+            buf.cell_mut((mx, area.y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(Color::Rgb(30, 30, 46)).bg(app_mode_fg));
+            });
+            mx += 1;
+        }
+
+        // flash message — right-aligned, before the app mode badge
         if let Some((ref msg, ref when)) = self.app.flash_message {
             let elapsed = when.elapsed().as_millis();
             if elapsed < 2500 {
                 let flash_fg = if elapsed < 2000 {
                     Color::Rgb(166, 227, 161) // green
                 } else {
-                    // fade to dim in last 500ms
                     Color::Rgb(86, 95, 137)
                 };
                 let display = format!(" {} ", msg);
-                let start_x = area.x + area.width - display.len() as u16;
+                let start_x = mode_start_x - display.len() as u16;
                 let mut fx = start_x;
                 for ch in display.chars() {
-                    if fx >= area.x + area.width {
+                    if fx >= mode_start_x {
                         break;
                     }
                     buf.cell_mut((fx, area.y)).map(|cell| {

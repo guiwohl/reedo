@@ -18,15 +18,32 @@ use crate::ui::theme_switcher::ThemeSwitcherState;
 use crate::ui::tree::TreeState;
 use std::collections::HashMap;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AppMode {
+    Editor,
+    Git,
+}
+
+impl AppMode {
+    pub fn label(&self) -> &str {
+        match self {
+            AppMode::Editor => "EDITOR",
+            AppMode::Git => "GIT",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Popup {
     None,
     FileTree,
+    GitTree,
     Search,
     SearchProject,
     Replace,
     ReplaceProject,
     FuzzyFinder,
+    GitFuzzyFinder,
     ThemeSwitcher,
     KeybindHelp,
     PaddingInput,
@@ -36,6 +53,7 @@ pub struct App {
     pub buffer: Buffer,
     pub cursor: Cursor,
     pub mode: Mode,
+    pub app_mode: AppMode,
     pub highlighter: Highlighter,
     pub needs_reparse: bool,
     pub running: bool,
@@ -55,7 +73,10 @@ pub struct App {
     pub theme: Theme,
     pub pending_key: Option<char>,
     pub popup: Popup,
+    pub side_panel_open: bool,
     pub tree_state: TreeState,
+    pub git_tree_state: TreeState,
+    pub git_fuzzy_state: FuzzyState,
     pub search_state: SearchState,
     pub replace_state: ReplaceState,
     pub fuzzy_state: FuzzyState,
@@ -77,6 +98,7 @@ impl App {
             buffer: Buffer::default(),
             cursor: Cursor::default(),
             mode: Mode::default(),
+            app_mode: AppMode::Editor,
             highlighter: Highlighter::default(),
             needs_reparse: false,
             running: true,
@@ -96,7 +118,10 @@ impl App {
             theme: loaded_theme,
             pending_key: None,
             popup: Popup::None,
+            side_panel_open: false,
             tree_state: TreeState::default(),
+            git_tree_state: TreeState::default(),
+            git_fuzzy_state: FuzzyState::default(),
             search_state: SearchState::default(),
             replace_state: ReplaceState::default(),
             fuzzy_state: FuzzyState::default(),
@@ -190,6 +215,13 @@ impl App {
                 self.git_info = GitInfo::gather(root);
                 if let Some(ref file_path) = self.buffer.file_path {
                     self.gutter_marks = GitInfo::diff_for_file(root, file_path);
+                }
+                // refresh git tree if in git mode
+                if self.app_mode == AppMode::Git {
+                    if let Some(ref git) = self.git_info {
+                        let root = root.clone();
+                        self.git_tree_state.build_git_only(&root, git);
+                    }
                 }
             }
             self.last_git_refresh = Instant::now();

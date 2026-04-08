@@ -20,7 +20,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::Terminal;
 
-use app::{App, Popup};
+use app::{App, AppMode, Popup};
 use config::settings::Settings;
 use editor::clipboard;
 use ui::fuzzy::FuzzyFinderWidget;
@@ -34,6 +34,8 @@ use ui::statusbar::StatusBar;
 use ui::theme_switcher::ThemeSwitcherWidget;
 use ui::tree::FileTreeWidget;
 use ui::welcome::WelcomeScreen;
+
+const SIDE_PANEL_WIDTH: u16 = 30;
 
 #[derive(Parser)]
 #[command(name = "reedo", about = "A minimal terminal text editor")]
@@ -181,28 +183,71 @@ fn event_loop(
         terminal.draw(|frame| {
             let full_area = frame.area();
 
+            // horizontal split: side panel + main content
+            let panel_width = if app.side_panel_open {
+                SIDE_PANEL_WIDTH.min(full_area.width / 3)
+            } else {
+                0
+            };
+
+            let h_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(if panel_width > 0 {
+                    vec![
+                        Constraint::Length(panel_width),
+                        Constraint::Min(1),
+                    ]
+                } else {
+                    vec![Constraint::Min(1)]
+                })
+                .split(full_area);
+
+            let main_area = if panel_width > 0 { h_chunks[1] } else { h_chunks[0] };
+            let panel_area = if panel_width > 0 { Some(h_chunks[0]) } else { None };
+
+            // render side panel tree (always visible when panel is open)
+            if let Some(panel) = panel_area {
+                let tree_state = match app.app_mode {
+                    AppMode::Editor => &app.tree_state,
+                    AppMode::Git => &app.git_tree_state,
+                };
+                let is_focused = matches!(
+                    (&app.app_mode, &app.popup),
+                    (AppMode::Editor, Popup::FileTree) | (AppMode::Git, Popup::GitTree)
+                );
+                frame.render_widget(
+                    SidePanelTree {
+                        state: tree_state,
+                        theme: &app.theme,
+                        focused: is_focused,
+                        git_mode: app.app_mode == AppMode::Git,
+                    },
+                    panel,
+                );
+            }
+
             // main layout: editor + status bar
             let main_chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(match app.popup {
                     Popup::Search => vec![
                         Constraint::Min(1),
-                        Constraint::Length(1), // search bar
-                        Constraint::Length(1), // status bar
+                        Constraint::Length(1),
+                        Constraint::Length(1),
                     ],
                     Popup::Replace => vec![
                         Constraint::Min(1),
-                        Constraint::Length(2), // replace bar (2 lines)
+                        Constraint::Length(2),
                         Constraint::Length(1),
                     ],
                     Popup::PaddingInput => vec![
                         Constraint::Min(1),
-                        Constraint::Length(1), // padding input bar
-                        Constraint::Length(1), // status bar
+                        Constraint::Length(1),
+                        Constraint::Length(1),
                     ],
                     _ => vec![Constraint::Min(1), Constraint::Length(1)],
                 })
-                .split(full_area);
+                .split(main_area);
 
             // show welcome screen if no file is open, otherwise editor
             if app.buffer.file_path.is_none()
@@ -236,7 +281,6 @@ fn event_loop(
                     frame.render_widget(StatusBar { app }, main_chunks[2]);
                 }
                 Popup::PaddingInput => {
-                    // render a simple input bar
                     let bar_area = main_chunks[1];
                     let bg = app.theme.statusbar_bg();
                     let fg = app.theme.statusbar_fg();
@@ -255,13 +299,23 @@ fn event_loop(
                 }
             }
 
-            // overlay popups
+            // overlay popups (only when NOT using side panel for that tree)
             match app.popup {
-                Popup::FileTree => {
+                Popup::FileTree if !app.side_panel_open => {
                     let tree_area = file_tree_popup_area(full_area);
                     frame.render_widget(
                         FileTreeWidget {
                             state: &app.tree_state,
+                            theme: &app.theme,
+                        },
+                        tree_area,
+                    );
+                }
+                Popup::GitTree if !app.side_panel_open => {
+                    let tree_area = file_tree_popup_area(full_area);
+                    frame.render_widget(
+                        FileTreeWidget {
+                            state: &app.git_tree_state,
                             theme: &app.theme,
                         },
                         tree_area,
@@ -276,6 +330,20 @@ fn event_loop(
                     frame.render_widget(
                         FuzzyFinderWidget {
                             state: &app.fuzzy_state,
+                            theme: &app.theme,
+                        },
+                        popup_area,
+                    );
+                }
+                Popup::GitFuzzyFinder => {
+                    let popup_width = (full_area.width * 60 / 100).max(40);
+                    let popup_height = (full_area.height * 60 / 100).max(10);
+                    let x = (full_area.width - popup_width) / 2;
+                    let y = (full_area.height - popup_height) / 4;
+                    let popup_area = Rect::new(x, y, popup_width, popup_height);
+                    frame.render_widget(
+                        FuzzyFinderWidget {
+                            state: &app.git_fuzzy_state,
                             theme: &app.theme,
                         },
                         popup_area,
@@ -392,9 +460,196 @@ fn event_loop(
     Ok(())
 }
 
+struct SidePanelTree<'a> {
+    state: &'a ui::tree::TreeState,
+    theme: &'a config::theme::Theme,
+    focused: bool,
+    git_mode: bool,
+}
+
+impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
+    fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
+        use ratatui::style::{Color, Modifier, Style};
+
+        if area.width < 3 || area.height < 2 {
+            return;
+        }
+
+        let bg = self.theme.popup_bg();
+        let border_color = if self.focused {
+            self.theme.popup_accent()
+        } else {
+            self.theme.popup_border()
+        };
+        let selected_bg = self.theme.popup_selected();
+        let dim = self.theme.popup_dim();
+        let accent = self.theme.popup_accent();
+        let git_colors = |status: char| -> Color {
+            match status {
+                'M' => Color::Rgb(249, 226, 175),
+                'A' => Color::Rgb(166, 227, 161),
+                'D' => Color::Rgb(247, 118, 142),
+                'U' => Color::Rgb(247, 118, 142),
+                '?' => Color::Rgb(86, 95, 137),
+                _ => Color::Rgb(192, 202, 245),
+            }
+        };
+
+        // fill background
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                buf.cell_mut((x, y)).map(|cell| {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(bg));
+                });
+            }
+        }
+
+        // right border only (separator between panel and editor)
+        let right_x = area.x + area.width - 1;
+        for y in area.y..area.y + area.height {
+            buf.cell_mut((right_x, y)).map(|cell| {
+                cell.set_char('│');
+                cell.set_style(Style::default().fg(border_color).bg(bg));
+            });
+        }
+
+        let inner_width = (area.width - 1) as usize; // -1 for border
+        let inner_x = area.x;
+        let title_y = area.y;
+
+        // title row
+        let title_label = if self.git_mode { "Git Changes" } else { "Explorer" };
+        let root_name = self
+            .state
+            .entries
+            .first()
+            .map(|e| e.name.as_str())
+            .unwrap_or(title_label);
+        let title = if self.git_mode {
+            format!(" \u{e702}  {} ", root_name)
+        } else {
+            format!(" \u{f015}  {} ", root_name)
+        };
+
+        let is_root_selected = self.focused && self.state.selected == 0;
+        let title_bg = if is_root_selected { selected_bg } else { bg };
+
+        for lx in inner_x..inner_x + inner_width as u16 {
+            buf.cell_mut((lx, title_y)).map(|cell| {
+                cell.set_style(Style::default().bg(title_bg));
+            });
+        }
+
+        let mut x = inner_x;
+        for ch in title.chars() {
+            if (x - inner_x) as usize >= inner_width {
+                break;
+            }
+            buf.cell_mut((x, title_y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(
+                    Style::default()
+                        .fg(accent)
+                        .bg(title_bg)
+                        .add_modifier(Modifier::BOLD),
+                );
+            });
+            x += 1;
+        }
+
+        // entries
+        let visible_height = area.height.saturating_sub(1) as usize;
+        for i in 0..visible_height {
+            let entry_idx = self.state.scroll_offset + i + 1;
+            let y = area.y + 1 + i as u16;
+            if y >= area.y + area.height {
+                break;
+            }
+
+            if let Some(entry) = self.state.entries.get(entry_idx) {
+                let is_selected = self.focused && entry_idx == self.state.selected;
+                let line_bg = if is_selected { selected_bg } else { bg };
+
+                for lx in inner_x..inner_x + inner_width as u16 {
+                    buf.cell_mut((lx, y)).map(|cell| {
+                        cell.set_style(Style::default().bg(line_bg));
+                    });
+                }
+
+                let indent = "  ".repeat(entry.depth);
+                let is_open = entry.is_dir && self.state.open_dirs.contains(&entry.path);
+                let icon = ui::tree::file_icon_pub(&entry.name, entry.is_dir, is_open);
+                let git_str = entry
+                    .git_status
+                    .map(|s| format!(" {}", s))
+                    .unwrap_or_default();
+
+                let display = format!(" {}{}{}{}", indent, icon, entry.name, git_str);
+
+                let icon_start = 1 + indent.len();
+                let icon_end = icon_start + icon.chars().count();
+                let name_start = icon_end;
+                let name_end = name_start + entry.name.len();
+
+                let mut cx = inner_x;
+                for (ci, ch) in display.chars().enumerate() {
+                    if (cx - inner_x) as usize >= inner_width {
+                        break;
+                    }
+                    let style = if ci >= icon_start && ci < icon_end {
+                        let mut s = Style::default().fg(entry.color).bg(line_bg);
+                        if entry.is_dir {
+                            s = s.add_modifier(Modifier::BOLD);
+                        }
+                        s
+                    } else if ci >= name_start && ci < name_end {
+                        let mut s = Style::default().fg(entry.color).bg(line_bg);
+                        if entry.is_dir {
+                            s = s.add_modifier(Modifier::BOLD);
+                        }
+                        s
+                    } else if ci >= name_end && entry.git_status.is_some() {
+                        Style::default()
+                            .fg(git_colors(entry.git_status.unwrap()))
+                            .bg(line_bg)
+                    } else {
+                        Style::default().fg(dim).bg(line_bg)
+                    };
+                    buf.cell_mut((cx, y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(style);
+                    });
+                    cx += 1;
+                }
+            }
+        }
+    }
+}
+
 fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+
+    // when side panel is open and tree is focused, Esc unfocuses (doesn't close panel)
+    // but only if no tree action is pending
+    if app.side_panel_open
+        && key.code == KeyCode::Esc
+        && matches!(app.popup, Popup::FileTree | Popup::GitTree)
+    {
+        let has_pending = match app.popup {
+            Popup::FileTree => {
+                app.tree_state.marked_for_move.is_some()
+                    || app.tree_state.action != crate::ui::tree::TreeAction::None
+            }
+            Popup::GitTree => false,
+            _ => false,
+        };
+        if !has_pending {
+            app.popup = Popup::None;
+            return;
+        }
+    }
 
     match app.popup {
         Popup::Search => match key.code {
@@ -515,13 +770,17 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
 
         Popup::FileTree => {
             use crate::ui::tree::TreeAction;
-            let tree_area = file_tree_popup_area(Rect::new(
-                0,
-                0,
-                app.viewport_width as u16,
-                app.viewport_height as u16,
-            ));
-            let visible = crate::ui::tree::tree_list_height(tree_area, false);
+            let visible = if app.side_panel_open {
+                app.viewport_height.saturating_sub(2)
+            } else {
+                let tree_area = file_tree_popup_area(Rect::new(
+                    0,
+                    0,
+                    app.viewport_width as u16,
+                    app.viewport_height as u16,
+                ));
+                crate::ui::tree::tree_list_height(tree_area, false)
+            };
 
             // ctrl+z / ctrl+y: tree filesystem undo/redo first, then buffer history
             if ctrl && key.code == KeyCode::Char('z') {
@@ -659,7 +918,9 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         } else {
                             let path = entry.path.clone();
                             let _ = app.open_file(&path);
-                            app.popup = Popup::None;
+                            if !app.side_panel_open {
+                                app.popup = Popup::None;
+                            }
                         }
                     }
                 }
@@ -709,6 +970,69 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         app.tree_state.mark_for_move();
                     }
                 }
+                _ => {}
+            }
+        }
+
+        Popup::GitTree => {
+            let tree_area = file_tree_popup_area(Rect::new(
+                0,
+                0,
+                app.viewport_width as u16,
+                app.viewport_height as u16,
+            ));
+            let visible = if app.side_panel_open {
+                app.viewport_height.saturating_sub(2)
+            } else {
+                crate::ui::tree::tree_list_height(tree_area, false)
+            };
+
+            match key.code {
+                KeyCode::Esc => {
+                    app.popup = Popup::None;
+                }
+                KeyCode::Up => {
+                    app.git_tree_state.move_up();
+                }
+                KeyCode::Down => {
+                    app.git_tree_state.move_down(visible);
+                }
+                KeyCode::Enter => {
+                    if let Some(entry) = app.git_tree_state.selected_entry() {
+                        if !entry.is_dir {
+                            let path = entry.path.clone();
+                            let _ = app.open_file(&path);
+                            if !app.side_panel_open {
+                                app.popup = Popup::None;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Popup::GitFuzzyFinder => {
+            let visible = app.viewport_height.saturating_sub(6);
+            match key.code {
+                KeyCode::Esc => {
+                    app.git_fuzzy_state.reset();
+                    app.popup = Popup::None;
+                }
+                KeyCode::Up => app.git_fuzzy_state.move_up(),
+                KeyCode::Down => app.git_fuzzy_state.move_down(visible),
+                KeyCode::Enter => {
+                    if let Some(rel_path) = app.git_fuzzy_state.selected_path().cloned() {
+                        if let Some(root) = app.project_root.clone() {
+                            let full_path = root.join(&rel_path);
+                            let _ = app.open_file(&full_path);
+                        }
+                    }
+                    app.git_fuzzy_state.reset();
+                    app.popup = Popup::None;
+                }
+                KeyCode::Backspace => app.git_fuzzy_state.delete_char(),
+                KeyCode::Char(ch) if !ctrl => app.git_fuzzy_state.insert_char(ch),
                 _ => {}
             }
         }
@@ -890,7 +1214,12 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
     let git_gutter_width = if has_git_gutter { 1u16 } else { 0 };
     let gutter_width = git_gutter_width + max_line_num_width as u16 + 1;
     let h_padding = app.horizontal_padding as u16;
-    let text_area_x = gutter_width + h_padding;
+    let panel_offset = if app.side_panel_open {
+        SIDE_PANEL_WIDTH.min(app.viewport_width as u16 / 3)
+    } else {
+        0
+    };
+    let text_area_x = panel_offset + gutter_width + h_padding;
     let full_width = app.viewport_width as u16;
     let full_height = app.viewport_height as u16;
     let full_area = Rect::new(0, 0, full_width, full_height);
@@ -900,7 +1229,44 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
             let click_x = mouse.column;
             let click_y = mouse.row;
 
-            if app.popup == Popup::FileTree {
+            // side panel click
+            if app.side_panel_open && click_x < panel_offset {
+                let tree_state = match app.app_mode {
+                    AppMode::Editor => &mut app.tree_state,
+                    AppMode::Git => &mut app.git_tree_state,
+                };
+                let popup_type = match app.app_mode {
+                    AppMode::Editor => Popup::FileTree,
+                    AppMode::Git => Popup::GitTree,
+                };
+                // focus the panel
+                app.popup = popup_type;
+                let visible_height = full_height.saturating_sub(2) as usize;
+                if click_y == 0 {
+                    tree_state.selected = 0;
+                } else {
+                    let entry_idx = tree_state.scroll_offset + click_y as usize;
+                    if entry_idx < tree_state.entries.len() {
+                        if tree_state.selected == entry_idx {
+                            // double click behavior
+                            if let Some(entry) = tree_state.entries.get(entry_idx) {
+                                if entry.is_dir {
+                                    tree_state.toggle_dir();
+                                } else {
+                                    let path = entry.path.clone();
+                                    let _ = app.open_file(&path);
+                                }
+                            }
+                        } else {
+                            tree_state.selected = entry_idx;
+                        }
+                    }
+                }
+                let _ = visible_height;
+                return;
+            }
+
+            if app.popup == Popup::FileTree && !app.side_panel_open {
                 let tree_area = file_tree_popup_area(full_area);
                 let inner = crate::ui::tree::tree_inner_area(tree_area);
                 let action_active = app.tree_state.action != crate::ui::tree::TreeAction::None;
@@ -1028,7 +1394,9 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
 
         MouseEventKind::ScrollUp => match app.popup {
             Popup::FileTree => app.tree_state.move_up(),
+            Popup::GitTree => app.git_tree_state.move_up(),
             Popup::FuzzyFinder => app.fuzzy_state.move_up(),
+            Popup::GitFuzzyFinder => app.git_fuzzy_state.move_up(),
             Popup::KeybindHelp => app.keybind_help_state.scroll_up(),
             Popup::ThemeSwitcher => app.theme_switcher_state.move_up(),
             Popup::SearchProject => app.project_search_state.move_up(),
@@ -1054,9 +1422,17 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
                 );
                 app.tree_state.move_down(visible);
             }
+            Popup::GitTree => {
+                let visible = app.viewport_height.saturating_sub(2);
+                app.git_tree_state.move_down(visible);
+            }
             Popup::FuzzyFinder => {
                 let visible = app.viewport_height.saturating_sub(6);
                 app.fuzzy_state.move_down(visible);
+            }
+            Popup::GitFuzzyFinder => {
+                let visible = app.viewport_height.saturating_sub(6);
+                app.git_fuzzy_state.move_down(visible);
             }
             Popup::KeybindHelp => {
                 let max = crate::ui::keybind_help::KeybindHelpState::total_lines()

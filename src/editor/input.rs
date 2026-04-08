@@ -115,18 +115,102 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // popup keybinds
-        KeyCode::Char('e') if ctrl || (app.mode == Mode::Normal && !shift) => {
-            if app.popup == crate::app::Popup::FileTree {
-                app.popup = crate::app::Popup::None;
-            } else {
-                if let Some(root) = app.project_root.clone() {
-                    app.tree_state.build(&root);
-                    if let Some(ref git) = app.git_info {
-                        app.tree_state.apply_git_statuses(git);
+        // ctrl+g: toggle app mode (editor/git)
+        KeyCode::Char('g') if ctrl && !shift => {
+            match app.app_mode {
+                crate::app::AppMode::Editor => {
+                    app.app_mode = crate::app::AppMode::Git;
+                    if let Some(root) = app.project_root.clone() {
+                        if let Some(ref git) = app.git_info {
+                            app.git_tree_state.build_git_only(&root, git);
+                        }
+                    }
+                    app.flash("git mode");
+                }
+                crate::app::AppMode::Git => {
+                    app.app_mode = crate::app::AppMode::Editor;
+                    app.flash("editor mode");
+                }
+            }
+        }
+
+        // ctrl+shift+e: toggle side panel
+        KeyCode::Char('E') if ctrl_shift => {
+            app.side_panel_open = !app.side_panel_open;
+            if app.side_panel_open {
+                match app.app_mode {
+                    crate::app::AppMode::Editor => {
+                        if let Some(root) = app.project_root.clone() {
+                            app.tree_state.build(&root);
+                            if let Some(ref git) = app.git_info {
+                                app.tree_state.apply_git_statuses(git);
+                            }
+                        }
+                    }
+                    crate::app::AppMode::Git => {
+                        if let Some(root) = app.project_root.clone() {
+                            if let Some(ref git) = app.git_info {
+                                app.git_tree_state.build_git_only(&root, git);
+                            }
+                        }
                     }
                 }
-                app.popup = crate::app::Popup::FileTree;
+                app.flash("side panel");
+            } else {
+                // close any tree popup focus when closing panel
+                if app.popup == crate::app::Popup::FileTree
+                    || app.popup == crate::app::Popup::GitTree
+                {
+                    app.popup = crate::app::Popup::None;
+                }
+            }
+        }
+
+        // ctrl+o: fuzzy finder for git-changed files
+        KeyCode::Char('o') if ctrl => {
+            if app.app_mode == crate::app::AppMode::Git {
+                app.git_fuzzy_state.reset();
+                if let Some(ref git) = app.git_info {
+                    let files: Vec<std::path::PathBuf> = git
+                        .file_statuses
+                        .keys()
+                        .cloned()
+                        .collect();
+                    app.git_fuzzy_state.all_files = files;
+                    app.git_fuzzy_state.filter();
+                }
+                app.popup = crate::app::Popup::GitFuzzyFinder;
+            }
+        }
+
+        // popup keybinds: e / ctrl+e for file tree (or git tree in git mode)
+        KeyCode::Char('e') if ctrl || (app.mode == Mode::Normal && !shift) => {
+            match app.app_mode {
+                crate::app::AppMode::Editor => {
+                    if app.popup == crate::app::Popup::FileTree {
+                        app.popup = crate::app::Popup::None;
+                    } else {
+                        if let Some(root) = app.project_root.clone() {
+                            app.tree_state.build(&root);
+                            if let Some(ref git) = app.git_info {
+                                app.tree_state.apply_git_statuses(git);
+                            }
+                        }
+                        app.popup = crate::app::Popup::FileTree;
+                    }
+                }
+                crate::app::AppMode::Git => {
+                    if app.popup == crate::app::Popup::GitTree {
+                        app.popup = crate::app::Popup::None;
+                    } else {
+                        if let Some(root) = app.project_root.clone() {
+                            if let Some(ref git) = app.git_info {
+                                app.git_tree_state.build_git_only(&root, git);
+                            }
+                        }
+                        app.popup = crate::app::Popup::GitTree;
+                    }
+                }
             }
         }
         KeyCode::Char('f') if ctrl && !shift => {

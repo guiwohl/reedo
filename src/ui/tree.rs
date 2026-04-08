@@ -119,6 +119,57 @@ impl TreeState {
         }
     }
 
+    pub fn build_git_only(&mut self, root: &Path, git_info: &crate::git::status::GitInfo) {
+        self.root = Some(root.to_path_buf());
+        self.entries.clear();
+        self.folder_color_idx = 0;
+
+        let root_name = root
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        self.entries.push(TreeEntry {
+            path: root.to_path_buf(),
+            name: root_name,
+            is_dir: true,
+            depth: 0,
+            color: Color::Rgb(137, 180, 250),
+            git_status: None,
+        });
+
+        let mut paths: Vec<_> = git_info
+            .file_statuses
+            .iter()
+            .map(|(p, s)| (p.clone(), *s))
+            .collect();
+        paths.sort_by(|a, b| a.0.cmp(&b.0));
+
+        for (rel_path, status) in &paths {
+            let full_path = root.join(rel_path);
+            let name = rel_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let color = match status {
+                'M' => Color::Rgb(249, 226, 175),
+                'A' => Color::Rgb(166, 227, 161),
+                'D' => Color::Rgb(247, 118, 142),
+                '?' => Color::Rgb(148, 226, 213),
+                _ => Color::Rgb(192, 202, 245),
+            };
+            self.entries.push(TreeEntry {
+                path: full_path,
+                name,
+                is_dir: false,
+                depth: 0,
+                color,
+                git_status: Some(*status),
+            });
+        }
+    }
+
     fn build_dir(&mut self, root: &Path, dir: &Path, depth: usize) {
         let mut children: Vec<PathBuf> = match std::fs::read_dir(dir) {
             Ok(entries) => entries.filter_map(|e| e.ok().map(|e| e.path())).collect(),
@@ -504,6 +555,10 @@ impl TreeState {
             self.root.clone().unwrap_or_else(|| PathBuf::from("."))
         }
     }
+}
+
+pub fn file_icon_pub(name: &str, is_dir: bool, is_open: bool) -> &'static str {
+    file_icon(name, is_dir, is_open)
 }
 
 fn file_icon(name: &str, is_dir: bool, is_open: bool) -> &'static str {
