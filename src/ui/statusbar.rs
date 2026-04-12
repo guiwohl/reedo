@@ -1,6 +1,6 @@
 use ratatui::buffer::Buffer as RatBuffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::Widget;
 
 use crate::app::App;
@@ -19,6 +19,7 @@ impl<'a> Widget for StatusBar<'a> {
         };
         let git_fg = Color::Rgb(203, 166, 247);
         let sep_fg = Color::Rgb(69, 71, 90);
+        let dim_fg = Color::Rgb(86, 95, 137);
 
         // fill background
         for x in area.x..area.x + area.width {
@@ -28,42 +29,57 @@ impl<'a> Widget for StatusBar<'a> {
             });
         }
 
-        // [MODE]
+        // [MODE] badge
         let mode_str = format!(" {} ", self.app.mode.label());
 
-        // line/total
+        // line/col info
         let line_info = format!(
-            " {}/{} ",
+            " {}:{} ",
             self.app.cursor.pos.line + 1,
-            self.app.buffer.line_count()
+            self.app.cursor.pos.col + 1,
         );
+
+        // total lines
+        let total_info = format!("/{} ", self.app.buffer.line_count());
 
         // git status
         let git_str = self
             .app
             .git_info
             .as_ref()
-            .map(|g| format!(" │ {} ", g.status_line()))
+            .map(|g| format!(" {} ", g.status_line()))
             .unwrap_or_default();
 
-        // filename + dirty
+        // file path (relative to project root if possible)
         let dirty = if self.app.buffer.dirty { " [+]" } else { "" };
-        let fname = self
-            .app
-            .buffer
-            .file_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "[new]".to_string());
-
+        let fname = if let (Some(file_path), Some(root)) =
+            (&self.app.buffer.file_path, &self.app.project_root)
+        {
+            file_path
+                .strip_prefix(root)
+                .ok()
+                .map(|rel| rel.display().to_string())
+                .unwrap_or_else(|| {
+                    file_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "[new]".to_string())
+                })
+        } else {
+            self.app
+                .buffer
+                .file_path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "[new]".to_string())
+        };
         let file_part = format!(" {}{}", fname, dirty);
 
-        let left = format!("{}{}{}{}", mode_str, line_info, git_str, file_part);
-
+        // build left side
+        let left = format!("{}{}{}", mode_str, line_info, total_info);
         let mode_end = mode_str.len();
         let line_end = mode_end + line_info.len();
-        let git_end = line_end + git_str.len();
 
         let mut x = area.x;
         for (i, ch) in left.chars().enumerate() {
@@ -71,17 +87,14 @@ impl<'a> Widget for StatusBar<'a> {
                 break;
             }
             let style = if i < mode_end {
-                Style::default().fg(Color::Rgb(30, 30, 46)).bg(mode_fg)
+                Style::default()
+                    .fg(Color::Rgb(30, 30, 46))
+                    .bg(mode_fg)
+                    .add_modifier(Modifier::BOLD)
             } else if i < line_end {
                 Style::default().fg(fg).bg(bg)
-            } else if i < git_end {
-                if ch == '│' {
-                    Style::default().fg(sep_fg).bg(bg)
-                } else {
-                    Style::default().fg(git_fg).bg(bg)
-                }
             } else {
-                Style::default().fg(fg).bg(bg)
+                Style::default().fg(dim_fg).bg(bg)
             };
             buf.cell_mut((x, area.y)).map(|cell| {
                 cell.set_char(ch);
@@ -90,41 +103,59 @@ impl<'a> Widget for StatusBar<'a> {
             x += 1;
         }
 
-        // right side: app mode badge + flash message
-        let app_mode_str = format!(" {} ", self.app.app_mode.label());
-        let app_mode_fg = match self.app.app_mode {
-            crate::app::AppMode::Editor => Color::Rgb(148, 226, 213), // teal
-            crate::app::AppMode::Git => Color::Rgb(250, 179, 135),    // peach/orange
-        };
-
-        // render app mode badge on the far right
-        let mode_start_x = area.x + area.width - app_mode_str.len() as u16;
-        let mut mx = mode_start_x;
-        for ch in app_mode_str.chars() {
-            if mx >= area.x + area.width {
-                break;
-            }
-            buf.cell_mut((mx, area.y)).map(|cell| {
-                cell.set_char(ch);
-                cell.set_style(Style::default().fg(Color::Rgb(30, 30, 46)).bg(app_mode_fg));
+        // separator
+        if !git_str.is_empty() {
+            buf.cell_mut((x, area.y)).map(|cell| {
+                cell.set_char('│');
+                cell.set_style(Style::default().fg(sep_fg).bg(bg));
             });
-            mx += 1;
+            x += 1;
+
+            for ch in git_str.chars() {
+                if x >= area.x + area.width {
+                    break;
+                }
+                buf.cell_mut((x, area.y)).map(|cell| {
+                    cell.set_char(ch);
+                    cell.set_style(Style::default().fg(git_fg).bg(bg));
+                });
+                x += 1;
+            }
         }
 
-        // flash message — right-aligned, before the app mode badge
+        // separator + file
+        buf.cell_mut((x, area.y)).map(|cell| {
+            cell.set_char('│');
+            cell.set_style(Style::default().fg(sep_fg).bg(bg));
+        });
+        x += 1;
+
+        for ch in file_part.chars() {
+            if x >= area.x + area.width {
+                break;
+            }
+            buf.cell_mut((x, area.y)).map(|cell| {
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(fg).bg(bg));
+            });
+            x += 1;
+        }
+
+        // flash message — right-aligned
         if let Some((ref msg, ref when)) = self.app.flash_message {
             let elapsed = when.elapsed().as_millis();
             if elapsed < 2500 {
                 let flash_fg = if elapsed < 2000 {
-                    Color::Rgb(166, 227, 161) // green
+                    Color::Rgb(166, 227, 161)
                 } else {
                     Color::Rgb(86, 95, 137)
                 };
                 let display = format!(" {} ", msg);
-                let start_x = mode_start_x - display.len() as u16;
+                let start_x =
+                    (area.x + area.width).saturating_sub(display.len() as u16);
                 let mut fx = start_x;
                 for ch in display.chars() {
-                    if fx >= mode_start_x {
+                    if fx >= area.x + area.width {
                         break;
                     }
                     buf.cell_mut((fx, area.y)).map(|cell| {

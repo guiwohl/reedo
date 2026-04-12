@@ -11,49 +11,35 @@ use crate::syntax::highlight::Highlighter;
 use crate::ui::fuzzy::FuzzyState;
 use crate::ui::keybind_help::KeybindHelpState;
 use crate::ui::replace::ReplaceState;
-use crate::ui::replace_project::ProjectReplaceState;
 use crate::ui::search::SearchState;
 use crate::ui::search_project::ProjectSearchState;
 use crate::ui::theme_switcher::ThemeSwitcherState;
 use crate::ui::tree::TreeState;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AppMode {
-    Editor,
-    Git,
-}
-
-impl AppMode {
-    pub fn label(&self) -> &str {
-        match self {
-            AppMode::Editor => "EDITOR",
-            AppMode::Git => "GIT",
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Popup {
     None,
     FileTree,
-    GitTree,
     Search,
     SearchProject,
     Replace,
-    ReplaceProject,
     FuzzyFinder,
-    GitFuzzyFinder,
     ThemeSwitcher,
     KeybindHelp,
-    PaddingInput,
+    RecentFiles,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SidePanelMode {
+    FileTree,
+    MarkdownOutline,
 }
 
 pub struct App {
     pub buffer: Buffer,
     pub cursor: Cursor,
     pub mode: Mode,
-    pub app_mode: AppMode,
     pub highlighter: Highlighter,
     pub needs_reparse: bool,
     pub running: bool,
@@ -74,21 +60,21 @@ pub struct App {
     pub pending_key: Option<char>,
     pub popup: Popup,
     pub side_panel_open: bool,
+    pub relative_line_numbers: bool,
+    pub show_whitespace: bool,
     pub tree_state: TreeState,
-    pub git_tree_state: TreeState,
-    pub git_fuzzy_state: FuzzyState,
     pub search_state: SearchState,
     pub replace_state: ReplaceState,
     pub fuzzy_state: FuzzyState,
     pub project_search_state: ProjectSearchState,
-    pub project_replace_state: ProjectReplaceState,
     pub theme_switcher_state: ThemeSwitcherState,
     pub keybind_help_state: KeybindHelpState,
-    pub padding_input: String,
     pub project_root: Option<PathBuf>,
     pub git_info: Option<GitInfo>,
     pub gutter_marks: HashMap<usize, GutterMark>,
     pub last_git_refresh: Instant,
+    pub recent_files: Vec<PathBuf>,
+    pub side_panel_mode: SidePanelMode,
 }
 
 impl App {
@@ -98,7 +84,6 @@ impl App {
             buffer: Buffer::default(),
             cursor: Cursor::default(),
             mode: Mode::default(),
-            app_mode: AppMode::Editor,
             highlighter: Highlighter::default(),
             needs_reparse: false,
             running: true,
@@ -118,22 +103,22 @@ impl App {
             theme: loaded_theme,
             pending_key: None,
             popup: Popup::None,
-            side_panel_open: false,
+            side_panel_open: settings.side_panel_open,
+            relative_line_numbers: false,
+            show_whitespace: false,
             tree_state: TreeState::default(),
-            git_tree_state: TreeState::default(),
-            git_fuzzy_state: FuzzyState::default(),
             search_state: SearchState::default(),
             replace_state: ReplaceState::default(),
             fuzzy_state: FuzzyState::default(),
             project_search_state: ProjectSearchState::default(),
-            project_replace_state: ProjectReplaceState::default(),
             theme_switcher_state: ThemeSwitcherState::default(),
             keybind_help_state: KeybindHelpState::default(),
-            padding_input: String::new(),
             project_root: None,
             git_info: None,
             gutter_marks: HashMap::new(),
             last_git_refresh: Instant::now(),
+            recent_files: Vec::new(),
+            side_panel_mode: SidePanelMode::FileTree,
         }
     }
 
@@ -149,20 +134,33 @@ impl App {
         self.viewport_left = 0;
         self.last_file_mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());
 
-        // detect and setup syntax highlighting
         if let Some(config) = Highlighter::detect_language(path) {
             self.highlighter.set_language(&config, &self.theme.colors);
             let source = self.buffer.rope.to_string();
             self.highlighter.parse(&source);
             self.highlighter.compute_styles(&source);
         } else if crate::syntax::highlight::is_env_file(path) {
-            // .env files use simple highlighting, no tree-sitter
             tracing::info!("detected .env file");
         }
 
-        // compute git gutter marks
         if let Some(ref root) = self.project_root {
             self.gutter_marks = GitInfo::diff_for_file(root, path);
+        }
+
+        // track in recent files
+        let abs = path.to_path_buf();
+        self.recent_files.retain(|p| p != &abs);
+        self.recent_files.insert(0, abs);
+        if self.recent_files.len() > 20 {
+            self.recent_files.truncate(20);
+        }
+
+        // auto-reveal in tree if side panel is open
+        if self.side_panel_open {
+            self.tree_state.reveal_path(path);
+            if let Some(ref git) = self.git_info {
+                self.tree_state.apply_git_statuses(git);
+            }
         }
 
         tracing::info!("opened file: {}", path.display());
@@ -216,13 +214,6 @@ impl App {
                 if let Some(ref file_path) = self.buffer.file_path {
                     self.gutter_marks = GitInfo::diff_for_file(root, file_path);
                 }
-                // refresh git tree if in git mode
-                if self.app_mode == AppMode::Git {
-                    if let Some(ref git) = self.git_info {
-                        let root = root.clone();
-                        self.git_tree_state.build_git_only(&root, git);
-                    }
-                }
             }
             self.last_git_refresh = Instant::now();
         }
@@ -256,19 +247,15 @@ impl App {
             return;
         }
 
-        // file changed on disk
         if self.buffer.dirty {
-            // local unsaved edits — don't reload, user's work takes priority
             tracing::info!("file changed externally but buffer is dirty, skipping reload");
             return;
         }
 
-        // reload: preserve cursor position as best we can
         let old_line = self.cursor.pos.line;
         let old_col = self.cursor.pos.col;
 
         if let Ok(()) = self.reload_file(&path) {
-            // clamp cursor to new file bounds
             let max_line = self.buffer.line_count().saturating_sub(1);
             let new_line = old_line.min(max_line);
             let new_col = old_col.min(self.buffer.line_len(new_line));
@@ -284,7 +271,6 @@ impl App {
         self.last_file_mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());
         self.needs_reparse = true;
 
-        // re-detect syntax
         if let Some(config) = Highlighter::detect_language(path) {
             self.highlighter.set_language(&config, &self.theme.colors);
             let source = self.buffer.rope.to_string();
@@ -292,7 +278,6 @@ impl App {
             self.highlighter.compute_styles(&source);
         }
 
-        // refresh gutter marks
         if let Some(ref root) = self.project_root {
             self.gutter_marks = GitInfo::diff_for_file(root, path);
         }
@@ -301,13 +286,16 @@ impl App {
     }
 
     pub fn scroll_to_cursor(&mut self) {
-        // vertical scroll
-        if self.cursor.pos.line < self.viewport_top {
-            self.viewport_top = self.cursor.pos.line;
+        let scrolloff: usize = 5;
+
+        // vertical scroll with margin
+        if self.cursor.pos.line < self.viewport_top + scrolloff {
+            self.viewport_top = self.cursor.pos.line.saturating_sub(scrolloff);
         }
-        let bottom = self.viewport_top + self.viewport_height.saturating_sub(2); // -2 for statusbar
-        if self.cursor.pos.line >= bottom {
-            self.viewport_top = self.cursor.pos.line - self.viewport_height.saturating_sub(3);
+        let visible_bottom = self.viewport_top + self.viewport_height.saturating_sub(2);
+        if self.cursor.pos.line + scrolloff >= visible_bottom {
+            self.viewport_top = (self.cursor.pos.line + scrolloff)
+                .saturating_sub(self.viewport_height.saturating_sub(3));
         }
 
         // horizontal scroll

@@ -10,7 +10,7 @@ pub struct FuzzyState {
     pub query: String,
     pub cursor_pos: usize,
     pub all_files: Vec<PathBuf>,
-    pub filtered: Vec<(PathBuf, i64)>, // (path, score)
+    pub filtered: Vec<(PathBuf, i64)>,
     pub selected: usize,
     pub scroll_offset: usize,
 }
@@ -29,6 +29,10 @@ impl FuzzyState {
         let walker = ignore::WalkBuilder::new(root)
             .hidden(false)
             .git_ignore(true)
+            .filter_entry(|entry| {
+                let name = entry.file_name().to_string_lossy();
+                name != ".git"
+            })
             .build();
 
         for entry in walker.flatten() {
@@ -128,9 +132,7 @@ fn fuzzy_score(haystack: &str, needle: &str) -> i64 {
     for n in needle.chars() {
         while hay_idx < hay_chars.len() {
             if hay_chars[hay_idx] == n {
-                // consecutive matches score higher
                 score += 10;
-                // beginning of word bonus
                 if hay_idx == 0
                     || hay_chars[hay_idx - 1] == '/'
                     || hay_chars[hay_idx - 1] == '_'
@@ -141,12 +143,11 @@ fn fuzzy_score(haystack: &str, needle: &str) -> i64 {
                 hay_idx += 1;
                 break;
             }
-            score -= 1; // penalty for skipping
+            score -= 1;
             hay_idx += 1;
         }
     }
 
-    // prefer shorter paths
     score -= (haystack.len() as i64) / 4;
     score
 }
@@ -154,6 +155,7 @@ fn fuzzy_score(haystack: &str, needle: &str) -> i64 {
 pub struct FuzzyFinderWidget<'a> {
     pub state: &'a FuzzyState,
     pub theme: &'a crate::config::theme::Theme,
+    pub project_root: Option<&'a Path>,
 }
 
 impl<'a> Widget for FuzzyFinderWidget<'a> {
@@ -186,8 +188,13 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
         // input line
         if area.height > 1 {
             let input_y = area.y + 1;
+            let count_info = if !self.state.filtered.is_empty() {
+                format!(" ({}) ", self.state.filtered.len())
+            } else {
+                String::new()
+            };
             let label = " > ";
-            let display = format!("{}{}", label, self.state.query);
+            let display = format!("{}{}{}", label, self.state.query, count_info);
             let mut x = area.x;
             for (i, ch) in display.chars().enumerate() {
                 if x >= area.x + area.width {
@@ -195,8 +202,10 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
                 }
                 let style = if i < label.len() {
                     Style::default().fg(accent).bg(bg)
-                } else {
+                } else if i < label.len() + self.state.query.len() {
                     Style::default().fg(fg).bg(bg)
+                } else {
+                    Style::default().fg(dim).bg(bg)
                 };
                 buf.cell_mut((x, input_y)).map(|cell| {
                     cell.set_char(ch);
@@ -216,10 +225,29 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
             }
         }
 
-        // file list
+        // split: left = file list, right = preview
         let list_start_y = area.y + 3;
         let list_height = area.height.saturating_sub(3) as usize;
+        let has_preview = area.width > 60;
+        let list_width = if has_preview {
+            (area.width * 45 / 100).max(20)
+        } else {
+            area.width
+        };
+        let preview_x = area.x + list_width;
+        let preview_width = area.width.saturating_sub(list_width);
 
+        // vertical separator between list and preview
+        if has_preview {
+            for y in list_start_y..area.y + area.height {
+                buf.cell_mut((preview_x, y)).map(|cell| {
+                    cell.set_char('│');
+                    cell.set_style(Style::default().fg(border_color).bg(bg));
+                });
+            }
+        }
+
+        // file list (left side)
         for i in 0..list_height {
             let file_idx = self.state.scroll_offset + i;
             let y = list_start_y + i as u16;
@@ -232,15 +260,13 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
                 let line_bg = if is_selected { selected_bg } else { bg };
                 let line_fg = if is_selected { accent } else { fg };
 
-                // fill line bg
-                for x in area.x..area.x + area.width {
+                for x in area.x..area.x + list_width {
                     buf.cell_mut((x, y)).map(|cell| {
                         cell.set_style(Style::default().bg(line_bg));
                     });
                 }
 
                 let path_str = path.to_string_lossy();
-                // show directory in dim, filename in bright
                 let (dir_part, file_part) = if let Some(parent) = path.parent() {
                     let parent_str = parent.to_string_lossy();
                     if parent_str.is_empty() {
@@ -259,7 +285,7 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
                 let dir_end = 2 + dir_part.len();
                 let mut x = area.x;
                 for (ci, ch) in display.chars().enumerate() {
-                    if x >= area.x + area.width {
+                    if x >= area.x + list_width {
                         break;
                     }
                     let style = if ci < dir_end {
@@ -276,6 +302,44 @@ impl<'a> Widget for FuzzyFinderWidget<'a> {
                         cell.set_style(style);
                     });
                     x += 1;
+                }
+            }
+        }
+
+        // file preview (right side)
+        if has_preview && preview_width > 2 {
+            if let Some(selected_path) = self.state.selected_path() {
+                let full_path = self
+                    .project_root
+                    .map(|r| r.join(selected_path))
+                    .unwrap_or_else(|| selected_path.clone());
+
+                if let Ok(content) = std::fs::read_to_string(&full_path) {
+                    let preview_inner_x = preview_x + 1;
+                    let preview_inner_width = preview_width.saturating_sub(2) as usize;
+
+                    for (i, line) in content.lines().enumerate() {
+                        if i >= list_height {
+                            break;
+                        }
+                        let y = list_start_y + i as u16;
+                        if y >= area.y + area.height {
+                            break;
+                        }
+
+                        let display: String = line.chars().take(preview_inner_width).collect();
+                        let mut x = preview_inner_x;
+                        for ch in display.chars() {
+                            if x >= area.x + area.width {
+                                break;
+                            }
+                            buf.cell_mut((x, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(Style::default().fg(dim).bg(bg));
+                            });
+                            x += 1;
+                        }
+                    }
                 }
             }
         }

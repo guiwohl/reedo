@@ -7,7 +7,7 @@ Settings and theming system.
 | File | Purpose |
 |---|---|
 | `settings.rs` | TOML config loading from `~/.config/reedo/reedo.conf.toml`. Creates a commented default on first run. All fields have serde defaults so partial configs work. |
-| `theme.rs` | Theme struct with string color fields. 9 bundled themes including `Default`. `load_theme()` checks custom dir first, falls back to bundled. `parse_theme_color()` converts hex strings, terminal defaults, and ANSI names to ratatui Color. |
+| `theme.rs` | Theme struct with string color fields including `cursorline`. 9 bundled themes including `Default`. `load_theme()` checks custom dir first, falls back to bundled. `parse_theme_color()` converts hex strings, terminal defaults, and ANSI names to ratatui Color. All 9 bundled themes define a cursorline value. |
 
 ## Config Path
 
@@ -18,6 +18,10 @@ Settings and theming system.
 1. Check `~/.config/reedo/themes/<name>.toml`
 2. Fall back to bundled themes in `bundled_themes()`
 3. Fall back to `Theme::default()` (reedo-dark)
+
+## Theme Color Fields
+
+ThemeColors includes `cursorline` — used for the current line highlight background in the editor viewport. Every bundled theme must define this.
 
 ## Gotchas
 

@@ -25,6 +25,16 @@ pub struct TreeEntry {
     pub depth: usize,
     pub color: Color,
     pub git_status: Option<char>,
+    pub is_last_sibling: bool,
+    pub file_size: Option<u64>,
+}
+
+pub fn format_item_count(count: u64) -> String {
+    if count == 1 {
+        "1 item".to_string()
+    } else {
+        format!("{} items", count)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -102,9 +112,32 @@ impl TreeState {
             depth: 0,
             color: Color::Rgb(137, 180, 250),
             git_status: None,
+            is_last_sibling: false,
+            file_size: None,
         });
 
         self.build_dir(root, root, 0);
+    }
+
+    pub fn reveal_path(&mut self, target: &Path) {
+        let root = match &self.root {
+            Some(r) => r.clone(),
+            None => return,
+        };
+        if let Ok(rel) = target.strip_prefix(&root) {
+            let mut current = root.clone();
+            for component in rel.parent().into_iter().flat_map(|p| p.components()) {
+                current = current.join(component);
+                self.open_dirs.insert(current.clone());
+            }
+            self.build(&root);
+            for (i, entry) in self.entries.iter().enumerate() {
+                if entry.path == target {
+                    self.selected = i;
+                    break;
+                }
+            }
+        }
     }
 
     pub fn apply_git_statuses(&mut self, git_info: &crate::git::status::GitInfo) {
@@ -112,61 +145,47 @@ impl TreeState {
             Some(r) => r.clone(),
             None => return,
         };
+
+        // apply file statuses
         for entry in &mut self.entries {
-            if let Ok(rel) = entry.path.strip_prefix(&root) {
-                entry.git_status = git_info.status_for_file(rel);
+            if !entry.is_dir {
+                if let Ok(rel) = entry.path.strip_prefix(&root) {
+                    entry.git_status = git_info.status_for_file(rel);
+                }
             }
         }
-    }
 
-    pub fn build_git_only(&mut self, root: &Path, git_info: &crate::git::status::GitInfo) {
-        self.root = Some(root.to_path_buf());
-        self.entries.clear();
-        self.folder_color_idx = 0;
+        // propagate to folders: a folder gets the "highest priority" status
+        // of any file beneath it (M > A > ? > D)
+        let mut folder_statuses: std::collections::HashMap<PathBuf, char> =
+            std::collections::HashMap::new();
 
-        let root_name = root
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        self.entries.push(TreeEntry {
-            path: root.to_path_buf(),
-            name: root_name,
-            is_dir: true,
-            depth: 0,
-            color: Color::Rgb(137, 180, 250),
-            git_status: None,
-        });
+        for (rel_path, &status) in &git_info.file_statuses {
+            let mut current = root.clone();
+            for component in rel_path.components() {
+                current = current.join(component);
+                if current != root.join(rel_path) {
+                    let existing = folder_statuses.get(&current).copied();
+                    let priority = |c: char| -> u8 {
+                        match c {
+                            'M' => 4,
+                            'A' => 3,
+                            '?' => 2,
+                            'D' => 1,
+                            _ => 0,
+                        }
+                    };
+                    if existing.map_or(true, |e| priority(status) > priority(e)) {
+                        folder_statuses.insert(current.clone(), status);
+                    }
+                }
+            }
+        }
 
-        let mut paths: Vec<_> = git_info
-            .file_statuses
-            .iter()
-            .map(|(p, s)| (p.clone(), *s))
-            .collect();
-        paths.sort_by(|a, b| a.0.cmp(&b.0));
-
-        for (rel_path, status) in &paths {
-            let full_path = root.join(rel_path);
-            let name = rel_path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            let color = match status {
-                'M' => Color::Rgb(249, 226, 175),
-                'A' => Color::Rgb(166, 227, 161),
-                'D' => Color::Rgb(247, 118, 142),
-                '?' => Color::Rgb(148, 226, 213),
-                _ => Color::Rgb(192, 202, 245),
-            };
-            self.entries.push(TreeEntry {
-                path: full_path,
-                name,
-                is_dir: false,
-                depth: 0,
-                color,
-                git_status: Some(*status),
-            });
+        for entry in &mut self.entries {
+            if entry.is_dir && entry.git_status.is_none() {
+                entry.git_status = folder_statuses.get(&entry.path).copied();
+            }
         }
     }
 
@@ -202,20 +221,30 @@ impl TreeState {
         });
 
         let dir_color = FOLDER_PALETTE[self.folder_color_idx % FOLDER_PALETTE.len()];
+        let child_count = children.len();
 
-        for child in children {
+        for (ci, child) in children.iter().enumerate() {
             let name = child
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
             let is_dir = child.is_dir();
+            let is_last = ci == child_count - 1;
 
             let color = if is_dir {
                 self.folder_color_idx += 1;
                 FOLDER_PALETTE[self.folder_color_idx % FOLDER_PALETTE.len()]
             } else {
                 dir_color
+            };
+
+            let file_size = if is_dir {
+                std::fs::read_dir(&child)
+                    .ok()
+                    .map(|entries| entries.count() as u64)
+            } else {
+                None
             };
 
             self.entries.push(TreeEntry {
@@ -225,10 +254,12 @@ impl TreeState {
                 depth,
                 color,
                 git_status: None,
+                is_last_sibling: is_last,
+                file_size,
             });
 
-            if is_dir && self.open_dirs.contains(&child) {
-                self.build_dir(root, &child, depth + 1);
+            if is_dir && self.open_dirs.contains(child) {
+                self.build_dir(root, child, depth + 1);
             }
         }
     }
@@ -557,6 +588,45 @@ impl TreeState {
     }
 }
 
+pub fn tree_guide_prefix(entries: &[TreeEntry], idx: usize) -> String {
+    let entry = &entries[idx];
+    if entry.depth == 0 {
+        return String::new();
+    }
+
+    let mut prefix = String::new();
+
+    // for each ancestor depth level, check if that ancestor's last sibling
+    // has already passed — if not, draw a continuation │
+    for d in 0..entry.depth.saturating_sub(1) {
+        let target_depth = d;
+        // look backwards from idx to find the ancestor at this depth
+        let mut ancestor_is_last = false;
+        for j in (1..idx).rev() {
+            if entries[j].depth == target_depth {
+                ancestor_is_last = entries[j].is_last_sibling;
+                break;
+            }
+            if entries[j].depth < target_depth {
+                break;
+            }
+        }
+        if ancestor_is_last {
+            prefix.push_str("  ");
+        } else {
+            prefix.push_str("│ ");
+        }
+    }
+
+    if entry.is_last_sibling {
+        prefix.push_str("└ ");
+    } else {
+        prefix.push_str("├ ");
+    }
+
+    prefix
+}
+
 pub fn file_icon_pub(name: &str, is_dir: bool, is_open: bool) -> &'static str {
     file_icon(name, is_dir, is_open)
 }
@@ -610,6 +680,8 @@ mod tests {
                 depth: 0,
                 color: Color::Reset,
                 git_status: None,
+                is_last_sibling: false,
+                file_size: None,
             }],
             ..TreeState::default()
         };
@@ -633,6 +705,8 @@ mod tests {
                     depth: 0,
                     color: Color::Reset,
                     git_status: None,
+                    is_last_sibling: false,
+                    file_size: None,
                 },
                 TreeEntry {
                     path: child.clone(),
@@ -641,6 +715,8 @@ mod tests {
                     depth: 1,
                     color: Color::Reset,
                     git_status: None,
+                    is_last_sibling: false,
+                    file_size: None,
                 },
             ],
             selected: 1,
@@ -826,7 +902,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     });
                 }
 
-                let indent = "  ".repeat(entry.depth);
+                let guide = tree_guide_prefix(&self.state.entries, entry_idx);
                 let is_open = entry.is_dir && self.state.open_dirs.contains(&entry.path);
                 let icon = file_icon(&entry.name, entry.is_dir, is_open);
                 let git_str = entry
@@ -842,22 +918,29 @@ impl<'a> Widget for FileTreeWidget<'a> {
 
                 let display = format!(
                     " {}{}{}{}{}",
-                    indent, icon, entry.name, git_str, move_indicator
+                    guide, icon, entry.name, git_str, move_indicator
                 );
 
-                // icon starts after " " + indent
-                let icon_start = 1 + indent.len();
+                let guide_end = 1 + guide.chars().count();
+                let icon_start = guide_end;
                 let icon_end = icon_start + icon.chars().count();
                 let name_start = icon_end;
                 let name_end = name_start + entry.name.len();
+
+                let guide_dim = Color::Rgb(
+                    match dim { Color::Rgb(r, _, _) => r.saturating_sub(10), _ => 50 },
+                    match dim { Color::Rgb(_, g, _) => g.saturating_sub(10), _ => 50 },
+                    match dim { Color::Rgb(_, _, b) => b.saturating_sub(10), _ => 60 },
+                );
 
                 let mut cx = inner.x;
                 for (ci, ch) in display.chars().enumerate() {
                     if cx >= inner.x + inner.width {
                         break;
                     }
-                    let style = if ci >= icon_start && ci < icon_end {
-                        // icon same color as name
+                    let style = if ci > 0 && ci < guide_end {
+                        Style::default().fg(guide_dim).bg(line_bg)
+                    } else if ci >= icon_start && ci < icon_end {
                         let mut s = Style::default().fg(entry.color).bg(line_bg);
                         if entry.is_dir {
                             s = s.add_modifier(Modifier::BOLD);
@@ -881,6 +964,25 @@ impl<'a> Widget for FileTreeWidget<'a> {
                         cell.set_style(style);
                     });
                     cx += 1;
+                }
+
+                // file size (right-aligned, dim)
+                if let Some(size) = entry.file_size {
+                    let size_str = format_item_count(size);
+                    let size_x = inner.x + inner.width - size_str.len() as u16 - 1;
+                    if size_x > cx {
+                        let mut sx = size_x;
+                        for ch in size_str.chars() {
+                            if sx >= inner.x + inner.width {
+                                break;
+                            }
+                            buf.cell_mut((sx, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(Style::default().fg(dim).bg(line_bg));
+                            });
+                            sx += 1;
+                        }
+                    }
                 }
             }
         }

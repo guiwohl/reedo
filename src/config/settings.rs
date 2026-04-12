@@ -46,6 +46,8 @@ pub struct Settings {
     pub line_wrapping: bool,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub side_panel_open: bool,
 }
 
 fn default_indent_size() -> usize {
@@ -76,6 +78,7 @@ impl Default for Settings {
             horizontal_padding: default_horizontal_padding(),
             line_wrapping: default_line_wrapping(),
             theme: default_theme(),
+            side_panel_open: false,
         }
     }
 }
@@ -109,6 +112,32 @@ impl Settings {
         let settings = Self::default();
         settings.save_default();
         settings
+    }
+
+    pub fn update_side_panel(open: bool) {
+        let path = Self::config_path();
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            let mut found = false;
+            let new_content: String = content
+                .lines()
+                .map(|line| {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("side_panel_open") {
+                        found = true;
+                        format!("side_panel_open = {}", open)
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let final_content = if found {
+                new_content
+            } else {
+                format!("{}\nside_panel_open = {}", content.trim_end(), open)
+            };
+            let _ = std::fs::write(&path, final_content);
+        }
     }
 
     pub fn update_theme(name: &str) {

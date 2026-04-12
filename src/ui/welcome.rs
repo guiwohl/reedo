@@ -3,9 +3,22 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
 
-const LOGO: &[&str] = &[r"(o<  -- Reedo!", r"//\", r"V_/_ "];
+const LOGO: &[&str] = &[
+    "               _       ",
+    " _ __ ___  ___| |_ ___ ",
+    "| '__/ _ \\/ _ \\ __/ _ \\",
+    "| | |  __/  __/ || (_) |",
+    "|_|  \\___|\\___|\\__\\___/ ",
+];
 
-const HINT: &str = "press F1 for keybindings";
+const HINTS: &[(&str, &str)] = &[
+    ("Ctrl+E / e", "file tree"),
+    ("Ctrl+P", "fuzzy finder"),
+    ("Ctrl+F", "search"),
+    ("F4", "side panel"),
+    ("F1", "all keybinds"),
+    ("Ctrl+Q", "quit"),
+];
 
 pub struct WelcomeScreen<'a> {
     pub theme: &'a crate::config::theme::Theme,
@@ -13,13 +26,16 @@ pub struct WelcomeScreen<'a> {
 
 impl<'a> Widget for WelcomeScreen<'a> {
     fn render(self, area: Rect, buf: &mut RatBuffer) {
-        let total_lines = LOGO.len() + 2;
+        let total_lines = LOGO.len() + 2 + HINTS.len();
         let start_y = area.height.saturating_sub(total_lines as u16) / 3;
         let logo_width = LOGO.iter().map(|line| line.len()).max().unwrap_or(0) as u16;
 
-        let logo_color = self.theme.popup_accent();
-        let logo_x = area.x + area.width.saturating_sub(logo_width) / 2;
+        let accent = self.theme.popup_accent();
+        let dim = self.theme.popup_dim();
+        let fg = self.theme.fg();
 
+        // logo
+        let logo_x = area.x + area.width.saturating_sub(logo_width) / 2;
         for (i, line) in LOGO.iter().enumerate() {
             let y = area.y + start_y + i as u16;
             if y >= area.y + area.height {
@@ -32,24 +48,35 @@ impl<'a> Widget for WelcomeScreen<'a> {
                 }
                 buf.cell_mut((x, y)).map(|cell| {
                     cell.set_char(ch);
-                    cell.set_style(Style::default().fg(logo_color).add_modifier(Modifier::BOLD));
+                    cell.set_style(Style::default().fg(accent).add_modifier(Modifier::BOLD));
                 });
                 x += 1;
             }
         }
 
-        // hint
-        let hint_y = area.y + start_y + LOGO.len() as u16 + 1;
-        if hint_y < area.y + area.height {
-            let x_offset = area.width.saturating_sub(HINT.len() as u16) / 2;
-            let mut x = area.x + x_offset;
-            for ch in HINT.chars() {
+        // hints
+        let hints_start = area.y + start_y + LOGO.len() as u16 + 2;
+        for (i, (key, desc)) in HINTS.iter().enumerate() {
+            let y = hints_start + i as u16;
+            if y >= area.y + area.height {
+                break;
+            }
+            let line = format!("{:>12}  {}", key, desc);
+            let center_x = area.x + area.width.saturating_sub(line.len() as u16) / 2;
+            let mut x = center_x;
+            let key_len = 12;
+            for (ci, ch) in line.chars().enumerate() {
                 if x >= area.x + area.width {
                     break;
                 }
-                buf.cell_mut((x, hint_y)).map(|cell| {
+                let style = if ci < key_len {
+                    Style::default().fg(fg)
+                } else {
+                    Style::default().fg(dim)
+                };
+                buf.cell_mut((x, y)).map(|cell| {
                     cell.set_char(ch);
-                    cell.set_style(Style::default().fg(self.theme.popup_border()));
+                    cell.set_style(style);
                 });
                 x += 1;
             }
