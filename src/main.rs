@@ -247,6 +247,11 @@ fn event_loop(
                         Constraint::Length(2),
                         Constraint::Length(1),
                     ],
+                    Popup::GotoLine => vec![
+                        Constraint::Min(1),
+                        Constraint::Length(1),
+                        Constraint::Length(1),
+                    ],
                     _ => vec![Constraint::Min(1), Constraint::Length(1)],
                 })
                 .split(main_area);
@@ -278,6 +283,20 @@ fn event_loop(
                             theme: &app.theme,
                         },
                         main_chunks[1],
+                    );
+                    frame.render_widget(StatusBar { app }, main_chunks[2]);
+                }
+                Popup::GotoLine => {
+                    let bar_area = main_chunks[1];
+                    let bg = app.theme.statusbar_bg();
+                    let fg = app.theme.statusbar_fg();
+                    frame.render_widget(
+                        ratatui::widgets::Paragraph::new(format!(
+                            " Go to line: {}█",
+                            app.goto_line_input
+                        ))
+                        .style(ratatui::style::Style::default().fg(fg).bg(bg)),
+                        bar_area,
                     );
                     frame.render_widget(StatusBar { app }, main_chunks[2]);
                 }
@@ -1190,6 +1209,18 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         app.tree_state.mark_for_move();
                     }
                 }
+                KeyCode::Char('z') if !ctrl => {
+                    app.tree_state.open_dirs.clear();
+                    if let Some(root) = app.tree_state.root.clone() {
+                        app.tree_state.build(&root);
+                        if let Some(ref git) = app.git_info {
+                            app.tree_state.apply_git_statuses(git);
+                        }
+                    }
+                    app.tree_state.selected = 0;
+                    app.tree_state.scroll_offset = 0;
+                    app.flash("collapsed all");
+                }
                 _ => {}
             }
         }
@@ -1327,6 +1358,27 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                 _ => {}
             }
         }
+
+        Popup::GotoLine => match key.code {
+            KeyCode::Esc => {
+                app.popup = Popup::None;
+            }
+            KeyCode::Enter => {
+                if let Ok(line_num) = app.goto_line_input.parse::<usize>() {
+                    let target = line_num.saturating_sub(1).min(app.buffer.line_count().saturating_sub(1));
+                    app.cursor.move_to(target, 0, false);
+                    app.cursor.update_desired_col();
+                }
+                app.popup = Popup::None;
+            }
+            KeyCode::Backspace => {
+                app.goto_line_input.pop();
+            }
+            KeyCode::Char(ch) if ch.is_ascii_digit() => {
+                app.goto_line_input.push(ch);
+            }
+            _ => {}
+        },
 
         Popup::None => unreachable!(),
     }

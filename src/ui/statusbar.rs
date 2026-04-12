@@ -141,6 +141,45 @@ impl<'a> Widget for StatusBar<'a> {
             x += 1;
         }
 
+        // word count for markdown files (right side, before flash)
+        let is_md = self
+            .app
+            .buffer
+            .file_path
+            .as_ref()
+            .map(|p| {
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e == "md" || e == "markdown")
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
+
+        if is_md {
+            let word_count: usize = (0..self.app.buffer.line_count())
+                .map(|i| {
+                    self.app
+                        .buffer
+                        .line_text(i)
+                        .split_whitespace()
+                        .count()
+                })
+                .sum();
+            let wc_str = format!(" {} words ", word_count);
+            let wc_start = (area.x + area.width).saturating_sub(wc_str.len() as u16);
+            let mut wx = wc_start;
+            for ch in wc_str.chars() {
+                if wx >= area.x + area.width {
+                    break;
+                }
+                buf.cell_mut((wx, area.y)).map(|cell| {
+                    cell.set_char(ch);
+                    cell.set_style(Style::default().fg(dim_fg).bg(bg));
+                });
+                wx += 1;
+            }
+        }
+
         // flash message — right-aligned
         if let Some((ref msg, ref when)) = self.app.flash_message {
             let elapsed = when.elapsed().as_millis();

@@ -28,6 +28,7 @@ pub enum Popup {
     ThemeSwitcher,
     KeybindHelp,
     RecentFiles,
+    GotoLine,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -75,6 +76,7 @@ pub struct App {
     pub last_git_refresh: Instant,
     pub recent_files: Vec<PathBuf>,
     pub side_panel_mode: SidePanelMode,
+    pub goto_line_input: String,
 }
 
 impl App {
@@ -119,6 +121,7 @@ impl App {
             last_git_refresh: Instant::now(),
             recent_files: Vec::new(),
             side_panel_mode: SidePanelMode::FileTree,
+            goto_line_input: String::new(),
         }
     }
 

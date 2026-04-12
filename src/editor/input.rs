@@ -26,6 +26,8 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.buffer.undo_stack.finish_group();
             app.mode = Mode::Normal;
             app.cursor.clear_selection();
+            // clear persistent search highlights
+            app.search_state.matches.clear();
         }
         KeyCode::Char('i') if app.mode == Mode::Normal && !ctrl => {
             app.mode = Mode::Insert;
@@ -102,6 +104,35 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.cursor.update_desired_col();
                 app.mark_edited();
             }
+        }
+
+        // Ctrl+D: duplicate line
+        KeyCode::Char('d') if ctrl => {
+            let line = app.cursor.pos.line;
+            let text = app.buffer.line_text(line);
+            let dup = format!("\n{}", text);
+            let end_of_line = app.buffer.line_len(line);
+            let pos = crate::editor::cursor::Position::new(line, end_of_line);
+            app.buffer.undo_stack.begin_group(app.cursor.pos);
+            app.buffer.insert_text(pos, &dup);
+            app.buffer.undo_stack.finish_group();
+            app.cursor.move_to(line + 1, app.cursor.pos.col, false);
+            app.mark_edited();
+        }
+
+        // Ctrl+L: goto line
+        KeyCode::Char('l') if ctrl => {
+            app.popup = crate::app::Popup::GotoLine;
+            app.goto_line_input.clear();
+        }
+
+        // Ctrl+/: toggle line comment
+        KeyCode::Char('/') if ctrl => {
+            toggle_line_comment(app);
+        }
+        KeyCode::Char('?') if ctrl => {
+            // some terminals send ? for ctrl+/
+            toggle_line_comment(app);
         }
 
         // F4: toggle side panel
@@ -205,14 +236,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 };
             }
         }
-        KeyCode::Char('/') if ctrl => {
-            app.keybind_help_state.reset();
-            app.popup = crate::app::Popup::KeybindHelp;
-        }
-        KeyCode::Char('?') if ctrl => {
-            app.keybind_help_state.reset();
-            app.popup = crate::app::Popup::KeybindHelp;
-        }
         KeyCode::Char('?') if shift => {
             if app.mode == Mode::Normal {
                 app.keybind_help_state.reset();
@@ -226,6 +249,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::F(1) => {
             app.keybind_help_state.reset();
             app.popup = crate::app::Popup::KeybindHelp;
+        }
+
+        // Ctrl+Enter or F7: toggle markdown checkbox
+        KeyCode::Enter if ctrl => {
+            toggle_markdown_checkbox(app);
         }
 
         // navigation: ctrl+alt+arrows = paragraph jump
@@ -301,7 +329,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.cursor.update_desired_col();
         }
         KeyCode::Home => {
-            app.cursor.move_to(app.cursor.pos.line, 0, shift);
+            let line_text = app.buffer.line_text(app.cursor.pos.line);
+            let first_non_ws = line_text.chars().take_while(|c| c.is_whitespace()).count();
+            let target = if app.cursor.pos.col == first_non_ws || first_non_ws == line_text.len() {
+                0
+            } else {
+                first_non_ws
+            };
+            app.cursor.move_to(app.cursor.pos.line, target, shift);
             app.cursor.update_desired_col();
         }
         KeyCode::End => {
@@ -435,8 +470,26 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             if app.cursor.has_selection() {
                 delete_selection_if_any(app);
             } else {
+                // auto-pair delete: if between matching brackets, delete both
+                let col = app.cursor.pos.col;
+                let line_text = app.buffer.line_text(app.cursor.pos.line);
+                let chars: Vec<char> = line_text.chars().collect();
+                let is_pair = col > 0
+                    && col < chars.len()
+                    && brackets::closing_pair(chars[col - 1]) == Some(chars[col]);
+
                 app.buffer.undo_stack.begin_group(app.cursor.pos);
-                if let Some(new_pos) = app.buffer.delete_char_backward(app.cursor.pos) {
+                if is_pair {
+                    // delete the closer first (at col), then the opener (at col-1)
+                    app.buffer.delete_char_forward(crate::editor::cursor::Position::new(
+                        app.cursor.pos.line,
+                        col,
+                    ));
+                    if let Some(new_pos) = app.buffer.delete_char_backward(app.cursor.pos) {
+                        app.cursor.move_to(new_pos.line, new_pos.col, false);
+                        app.cursor.update_desired_col();
+                    }
+                } else if let Some(new_pos) = app.buffer.delete_char_backward(app.cursor.pos) {
                     app.cursor.move_to(new_pos.line, new_pos.col, false);
                     app.cursor.update_desired_col();
                 }
@@ -454,15 +507,25 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
             app.mark_edited();
         }
+        KeyCode::Tab if app.mode == Mode::Insert && shift => {
+            // Shift+Tab: dedent selected lines (or current line)
+            indent_lines(app, false);
+        }
         KeyCode::Tab if app.mode == Mode::Insert => {
-            delete_selection_if_any(app);
-            app.buffer.undo_stack.begin_group(app.cursor.pos);
-            let spaces = " ".repeat(app.indent_size);
-            let new_pos = app.buffer.insert_text(app.cursor.pos, &spaces);
-            app.buffer.undo_stack.finish_group();
-            app.cursor.move_to(new_pos.line, new_pos.col, false);
-            app.cursor.update_desired_col();
-            app.mark_edited();
+            if app.cursor.has_selection() {
+                indent_lines(app, true);
+            } else {
+                app.buffer.undo_stack.begin_group(app.cursor.pos);
+                let spaces = " ".repeat(app.indent_size);
+                let new_pos = app.buffer.insert_text(app.cursor.pos, &spaces);
+                app.buffer.undo_stack.finish_group();
+                app.cursor.move_to(new_pos.line, new_pos.col, false);
+                app.cursor.update_desired_col();
+                app.mark_edited();
+            }
+        }
+        KeyCode::BackTab if app.mode == Mode::Insert => {
+            indent_lines(app, false);
         }
 
         KeyCode::Char('w') if ctrl && app.mode == Mode::Insert => {
@@ -696,4 +759,123 @@ fn find_next_paragraph(app: &App) -> usize {
         line += 1;
     }
     line
+}
+
+fn indent_lines(app: &mut App, indent: bool) {
+    let (start_line, end_line) = if let Some(sel) = &app.cursor.selection {
+        let s = sel.start();
+        let e = sel.end();
+        (s.line, e.line)
+    } else {
+        (app.cursor.pos.line, app.cursor.pos.line)
+    };
+
+    app.buffer.undo_stack.begin_group(app.cursor.pos);
+    let spaces = " ".repeat(app.indent_size);
+
+    for line in start_line..=end_line {
+        if indent {
+            let pos = crate::editor::cursor::Position::new(line, 0);
+            app.buffer.insert_text(pos, &spaces);
+        } else {
+            let text = app.buffer.line_text(line);
+            let leading: usize = text.chars().take_while(|c| *c == ' ').count();
+            let remove = leading.min(app.indent_size);
+            if remove > 0 {
+                let start = crate::editor::cursor::Position::new(line, 0);
+                let end = crate::editor::cursor::Position::new(line, remove);
+                app.buffer.delete_range(start, end);
+            }
+        }
+    }
+    app.buffer.undo_stack.finish_group();
+    app.mark_edited();
+}
+
+fn toggle_line_comment(app: &mut App) {
+    let ext = app
+        .buffer
+        .file_path
+        .as_ref()
+        .and_then(|p| p.extension())
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    let prefix = match ext {
+        "rs" | "js" | "mjs" | "cjs" | "ts" | "tsx" | "c" | "h" | "go" | "zig" | "css"
+        | "scss" | "json" | "java" => "// ",
+        "py" | "sh" | "bash" | "zsh" | "yaml" | "yml" | "toml" | "rb" | "ruby" | "conf" => "# ",
+        "lua" | "sql" => "-- ",
+        "html" | "htm" => "<!-- ",
+        _ => "// ",
+    };
+
+    let (start_line, end_line) = if let Some(sel) = &app.cursor.selection {
+        let s = sel.start();
+        let e = sel.end();
+        (s.line, e.line)
+    } else {
+        (app.cursor.pos.line, app.cursor.pos.line)
+    };
+
+    // check if all lines are already commented
+    let all_commented = (start_line..=end_line).all(|line| {
+        let text = app.buffer.line_text(line);
+        text.trim_start().starts_with(prefix.trim_end())
+    });
+
+    app.buffer.undo_stack.begin_group(app.cursor.pos);
+
+    for line in start_line..=end_line {
+        if all_commented {
+            let text = app.buffer.line_text(line);
+            let leading_ws: usize = text.chars().take_while(|c| c.is_whitespace()).count();
+            let after_ws = &text[leading_ws..];
+            if after_ws.starts_with(prefix) {
+                let start = crate::editor::cursor::Position::new(line, leading_ws);
+                let end =
+                    crate::editor::cursor::Position::new(line, leading_ws + prefix.len());
+                app.buffer.delete_range(start, end);
+            } else if after_ws.starts_with(prefix.trim_end()) {
+                let p = prefix.trim_end();
+                let start = crate::editor::cursor::Position::new(line, leading_ws);
+                let end = crate::editor::cursor::Position::new(line, leading_ws + p.len());
+                app.buffer.delete_range(start, end);
+            }
+        } else {
+            let text = app.buffer.line_text(line);
+            let leading_ws: usize = text.chars().take_while(|c| c.is_whitespace()).count();
+            let pos = crate::editor::cursor::Position::new(line, leading_ws);
+            app.buffer.insert_text(pos, prefix);
+        }
+    }
+
+    app.buffer.undo_stack.finish_group();
+    app.mark_edited();
+}
+
+fn toggle_markdown_checkbox(app: &mut App) {
+    let line = app.cursor.pos.line;
+    let text = app.buffer.line_text(line);
+    let trimmed = text.trim_start();
+
+    if trimmed.starts_with("- [ ] ") {
+        let offset = text.len() - trimmed.len();
+        let start = crate::editor::cursor::Position::new(line, offset + 2);
+        let end = crate::editor::cursor::Position::new(line, offset + 5);
+        app.buffer.undo_stack.begin_group(app.cursor.pos);
+        app.buffer.delete_range(start, end);
+        app.buffer.insert_text(start, "[x]");
+        app.buffer.undo_stack.finish_group();
+        app.mark_edited();
+    } else if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+        let offset = text.len() - trimmed.len();
+        let start = crate::editor::cursor::Position::new(line, offset + 2);
+        let end = crate::editor::cursor::Position::new(line, offset + 5);
+        app.buffer.undo_stack.begin_group(app.cursor.pos);
+        app.buffer.delete_range(start, end);
+        app.buffer.insert_text(start, "[ ]");
+        app.buffer.undo_stack.finish_group();
+        app.mark_edited();
+    }
 }

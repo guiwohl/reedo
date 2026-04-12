@@ -90,6 +90,22 @@ impl<'a> Widget for EditorView<'a> {
         let tw = text_area_width as usize;
         let indent_size = self.app.indent_size;
 
+        // matching bracket highlight
+        let bracket_match = find_matching_bracket(self.app);
+        let bracket_highlight_color = Color::Rgb(249, 226, 175);
+
+        // persistent search highlights
+        let search_matches: &[(usize, usize)] = &self.app.search_state.matches;
+        let search_highlight_bg = match theme_bg {
+            Color::Rgb(r, g, b) => Color::Rgb(
+                r.saturating_add(30),
+                g.saturating_add(25),
+                b,
+            ),
+            _ => Color::Yellow,
+        };
+        let search_query_len = self.app.search_state.query.len();
+
         // build screen rows: Vec<(file_line, char_offset)>
         let mut screen_rows: Vec<(usize, usize)> = Vec::new();
         let mut file_line = self.app.viewport_top;
@@ -293,6 +309,28 @@ impl<'a> Widget for EditorView<'a> {
                         style = style.bg(line_bg);
                     }
 
+                    // search highlight
+                    if search_query_len > 0 {
+                        for &(match_line, match_col) in search_matches {
+                            if file_line == match_line
+                                && file_col >= match_col
+                                && file_col < match_col + search_query_len
+                            {
+                                style = style.bg(search_highlight_bg);
+                                break;
+                            }
+                        }
+                    }
+
+                    // bracket match highlight
+                    if let Some((bl, bc)) = bracket_match {
+                        if file_line == bl && file_col == bc {
+                            style = style
+                                .fg(bracket_highlight_color)
+                                .add_modifier(Modifier::BOLD);
+                        }
+                    }
+
                     // selection overlay (takes priority)
                     if let (Some(ss), Some(se)) = (sel_start, sel_end) {
                         let in_selection = if ss.line == se.line {
@@ -313,6 +351,53 @@ impl<'a> Widget for EditorView<'a> {
                         cell.set_char(display_ch);
                         cell.set_style(style);
                     });
+                }
+
+                // hex color preview: scan visible text for #rrggbb and show colored █
+                {
+                    let line_chars: Vec<char> = line_text.chars().collect();
+                    let mut ci = scroll_col;
+                    while ci + 6 < line_chars.len() {
+                        if line_chars[ci] == '#' {
+                            let hex: String = line_chars[ci + 1..ci + 7].iter().collect();
+                            if hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                                if let (Ok(r), Ok(g), Ok(b)) = (
+                                    u8::from_str_radix(&hex[0..2], 16),
+                                    u8::from_str_radix(&hex[2..4], 16),
+                                    u8::from_str_radix(&hex[4..6], 16),
+                                ) {
+                                    // render colored block after the hex string
+                                    let preview_col = ci + 7;
+                                    let screen_i = preview_col.saturating_sub(scroll_col);
+                                    let px = text_area_x + screen_i as u16;
+                                    if px < text_area_x + text_area_width && px < area.x + area.width {
+                                        buf.cell_mut((px, y)).map(|cell| {
+                                            cell.set_char('█');
+                                            cell.set_style(
+                                                Style::default().fg(Color::Rgb(r, g, b)).bg(
+                                                    if is_cursor_line { line_bg } else { theme_bg },
+                                                ),
+                                            );
+                                        });
+                                    }
+                                }
+                                ci += 7;
+                                continue;
+                            }
+                        }
+                        ci += 1;
+                    }
+                }
+
+                // wrap indicator: show ⤷ at end of wrapped rows
+                if wrap_enabled && tw > 0 && char_offset + tw < line_text.chars().count() {
+                    let wrap_x = text_area_x + tw as u16;
+                    if wrap_x < area.x + area.width {
+                        buf.cell_mut((wrap_x, y)).map(|cell| {
+                            cell.set_char('⤷');
+                            cell.set_style(Style::default().fg(indent_guide_color).bg(line_bg));
+                        });
+                    }
                 }
             } else {
                 let tilde_x = area.x + gutter_width.saturating_sub(2);
@@ -360,11 +445,7 @@ impl<'a> Widget for EditorView<'a> {
                 }
                 crate::editor::mode::Mode::Insert => {
                     buf.cell_mut((cursor_x, cursor_y)).map(|cell| {
-                        cell.set_style(
-                            cell.style()
-                                .add_modifier(Modifier::UNDERLINED)
-                                .fg(theme_cursor_bg),
-                        );
+                        cell.set_style(cell.style().fg(theme_cursor_bg));
                     });
                 }
             }
@@ -513,6 +594,100 @@ fn find_breadcrumb(app: &crate::app::App) -> Option<String> {
             {
                 return Some(text.to_string());
             }
+        }
+    }
+    None
+}
+
+fn find_matching_bracket(app: &crate::app::App) -> Option<(usize, usize)> {
+    let line = app.cursor.pos.line;
+    let col = app.cursor.pos.col;
+    let text = app.buffer.line_text(line);
+    let chars: Vec<char> = text.chars().collect();
+
+    let ch = if col < chars.len() {
+        chars[col]
+    } else if col > 0 && col - 1 < chars.len() {
+        // check char before cursor too
+        return find_matching_bracket_at(app, line, col - 1);
+    } else {
+        return None;
+    };
+
+    if matches!(ch, '(' | '[' | '{' | ')' | ']' | '}') {
+        find_matching_bracket_at(app, line, col)
+    } else if col > 0 && col - 1 < chars.len() {
+        let prev = chars[col - 1];
+        if matches!(prev, '(' | '[' | '{' | ')' | ']' | '}') {
+            find_matching_bracket_at(app, line, col - 1)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+fn find_matching_bracket_at(app: &crate::app::App, line: usize, col: usize) -> Option<(usize, usize)> {
+    let text = app.buffer.line_text(line);
+    let chars: Vec<char> = text.chars().collect();
+    if col >= chars.len() {
+        return None;
+    }
+    let ch = chars[col];
+    let (target, forward) = match ch {
+        '(' => (')', true),
+        '[' => (']', true),
+        '{' => ('}', true),
+        ')' => ('(', false),
+        ']' => ('[', false),
+        '}' => ('{', false),
+        _ => return None,
+    };
+
+    let mut depth = 0i32;
+    let line_count = app.buffer.line_count();
+
+    if forward {
+        let mut l = line;
+        let c = col;
+        while l < line_count {
+            let lt = app.buffer.line_text(l);
+            let lc: Vec<char> = lt.chars().collect();
+            let start = if l == line { c } else { 0 };
+            for ci in start..lc.len() {
+                if lc[ci] == ch {
+                    depth += 1;
+                } else if lc[ci] == target {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((l, ci));
+                    }
+                }
+            }
+            l += 1;
+        }
+    } else {
+        let mut l = line as i64;
+        let mut first = true;
+        while l >= 0 {
+            let lt = app.buffer.line_text(l as usize);
+            let lc: Vec<char> = lt.chars().collect();
+            let end = if first { col } else { lc.len().saturating_sub(1) };
+            first = false;
+            for ci in (0..=end).rev() {
+                if ci < lc.len() {
+                    if lc[ci] == ch {
+                        depth += 1;
+                    } else if lc[ci] == target {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some((l as usize, ci));
+                        }
+                    }
+                }
+            }
+            l -= 1;
         }
     }
     None
