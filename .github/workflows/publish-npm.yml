@@ -21,11 +21,11 @@ jobs:
             npm_dir: linux-arm64-gnu
             binary: reedo
           - target: x86_64-apple-darwin
-            os: macos-13
+            os: macos-latest
             npm_dir: darwin-x64
             binary: reedo
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             npm_dir: darwin-arm64
             binary: reedo
           - target: x86_64-pc-windows-msvc
