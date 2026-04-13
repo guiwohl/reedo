@@ -37,6 +37,9 @@ impl FuzzyState {
 
         for entry in walker.flatten() {
             if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if is_binary_file(entry.path()) {
+                    continue;
+                }
                 if let Ok(rel) = entry.path().strip_prefix(root) {
                     self.all_files.push(rel.to_path_buf());
                 }
@@ -108,6 +111,30 @@ impl FuzzyState {
     pub fn selected_path(&self) -> Option<&PathBuf> {
         self.filtered.get(self.selected).map(|(p, _)| p)
     }
+}
+
+fn is_binary_file(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "webp" | "svg" | "avif"
+            | "mp3" | "mp4" | "avi" | "mov" | "mkv" | "flac" | "wav" | "ogg" | "webm"
+            | "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" | "zst"
+            | "exe" | "dll" | "so" | "dylib" | "o" | "a" | "obj" | "lib"
+            | "wasm" | "class" | "pyc" | "pyo"
+            | "pdf" | "doc" | "docx" | "xls" | "xlsx" | "ppt" | "pptx"
+            | "ttf" | "otf" | "woff" | "woff2" | "eot"
+            | "sqlite" | "db" | "sqlite3"
+            | "bin" | "dat" | "pak" | "bundle"
+            | "icns" | "cur"
+            | "jar" | "war" | "ear"
+            | "dmg" | "iso" | "img"
+            | "DS_Store"
+    )
 }
 
 fn fuzzy_match(haystack: &str, needle: &str) -> bool {

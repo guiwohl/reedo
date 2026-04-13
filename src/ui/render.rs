@@ -445,7 +445,12 @@ impl<'a> Widget for EditorView<'a> {
                 }
                 crate::editor::mode::Mode::Insert => {
                     buf.cell_mut((cursor_x, cursor_y)).map(|cell| {
-                        cell.set_style(cell.style().fg(theme_cursor_bg));
+                        cell.set_style(
+                            Style::default()
+                                .fg(theme_cursor_bg)
+                                .bg(theme_cursorline)
+                                .add_modifier(Modifier::UNDERLINED),
+                        );
                     });
                 }
             }

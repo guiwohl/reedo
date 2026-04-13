@@ -143,6 +143,16 @@ fn run_tui(cli: Cli, settings: Settings) -> io::Result<()> {
         app.set_project_root(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     }
 
+    // build tree on startup if side panel is persisted open
+    if app.side_panel_open {
+        if let Some(root) = app.project_root.clone() {
+            app.tree_state.build(&root);
+            if let Some(ref git) = app.git_info {
+                app.tree_state.apply_git_statuses(git);
+            }
+        }
+    }
+
     terminal::enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(
@@ -772,7 +782,7 @@ impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
         }
 
         // entries
-        let visible_height = area.height.saturating_sub(1) as usize;
+        let visible_height = area.height.saturating_sub(if self.focused { 2 } else { 1 }) as usize;
         for i in 0..visible_height {
             let entry_idx = self.state.scroll_offset + i + 1;
             let y = area.y + 1 + i as u16;
@@ -845,10 +855,26 @@ impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
                     cx += 1;
                 }
 
-                // file size (right-aligned)
-                if let Some(size) = entry.file_size {
-                    let size_str = ui::tree::format_item_count(size);
-                    let size_x = inner_x + inner_width as u16 - size_str.len() as u16 - 1;
+                // right-aligned: hint key or file size
+                let hint_key = self
+                    .state
+                    .hint_index_for_entry(entry_idx)
+                    .map(|n| format!("{}", n + 1));
+                let is_scope_parent = {
+                    let scope = self.state.hint_scope.as_ref().or(self.state.root.as_ref());
+                    let is_root = self.state.root.as_ref() == Some(&entry.path);
+                    scope.map_or(false, |s| entry.path == *s) && !is_root
+                };
+
+                let right_label = if let Some(ref k) = hint_key {
+                    Some((k.as_str(), dim))
+                } else if is_scope_parent {
+                    Some(("⌫", dim))
+                } else if let Some(size) = entry.file_size {
+                    // render file size as before, then skip below
+                    let size_str = ui::tree::format_size(size);
+                    let size_x =
+                        inner_x + inner_width as u16 - size_str.len() as u16 - 1;
                     if size_x > cx {
                         let mut sx = size_x;
                         for ch in size_str.chars() {
@@ -862,6 +888,98 @@ impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
                             sx += 1;
                         }
                     }
+                    None
+                } else {
+                    None
+                };
+
+                if let Some((label, color)) = right_label {
+                    let label_x =
+                        inner_x + inner_width as u16 - label.chars().count() as u16 - 1;
+                    if label_x > cx {
+                        let mut sx = label_x;
+                        for ch in label.chars() {
+                            if (sx - inner_x) as usize >= inner_width {
+                                break;
+                            }
+                            buf.cell_mut((sx, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(Style::default().fg(color).bg(line_bg));
+                            });
+                            sx += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        // hint bar at bottom
+        if self.focused {
+            let hint_y = area.y + area.height - 1;
+            for lx in inner_x..inner_x + inner_width as u16 {
+                buf.cell_mut((lx, hint_y)).map(|cell| {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(bg));
+                });
+            }
+
+            let is_at_root = self.state.hint_scope.as_ref() == self.state.root.as_ref()
+                || self.state.hint_scope.is_none();
+            let max_n = self.state.hint_indices.len();
+
+            let mut parts: Vec<(&str, String)> = Vec::new();
+            if max_n > 0 {
+                let range = if max_n == 1 {
+                    "1".to_string()
+                } else {
+                    format!("1-{}", max_n)
+                };
+                parts.push(("jump", range));
+            }
+            if !is_at_root {
+                parts.push(("back", "⌫".to_string()));
+            }
+            parts.push(("new", "n".to_string()));
+            parts.push(("del", "d".to_string()));
+
+            let guide_dim = Color::Rgb(50, 50, 60);
+            let key_fg = self.theme.fg();
+            let desc_fg = dim;
+            let mut hx = inner_x + 1;
+            for (i, (desc, key)) in parts.iter().enumerate() {
+                if hx >= inner_x + inner_width as u16 - 1 {
+                    break;
+                }
+                for ch in key.chars() {
+                    if hx >= inner_x + inner_width as u16 - 1 {
+                        break;
+                    }
+                    buf.cell_mut((hx, hint_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(key_fg).bg(bg));
+                    });
+                    hx += 1;
+                }
+                if hx < inner_x + inner_width as u16 - 1 {
+                    hx += 1;
+                }
+                for ch in desc.chars() {
+                    if hx >= inner_x + inner_width as u16 - 1 {
+                        break;
+                    }
+                    buf.cell_mut((hx, hint_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(desc_fg).bg(bg));
+                    });
+                    hx += 1;
+                }
+                if i + 1 < parts.len() && hx + 2 < inner_x + inner_width as u16 - 1 {
+                    hx += 1;
+                    buf.cell_mut((hx, hint_y)).map(|cell| {
+                        cell.set_char('│');
+                        cell.set_style(Style::default().fg(guide_dim).bg(bg));
+                    });
+                    hx += 2;
                 }
             }
         }
@@ -1000,7 +1118,7 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
         Popup::FileTree => {
             use crate::ui::tree::TreeAction;
             let visible = if app.side_panel_open {
-                app.viewport_height.saturating_sub(2)
+                app.viewport_height.saturating_sub(3)
             } else {
                 let tree_area = file_tree_popup_area(Rect::new(
                     0,
@@ -1008,7 +1126,7 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                     app.viewport_width as u16,
                     app.viewport_height as u16,
                 ));
-                crate::ui::tree::tree_list_height(tree_area, false)
+                crate::ui::tree::tree_list_height(tree_area)
             };
 
             // ctrl+z / ctrl+y: tree filesystem undo/redo
@@ -1219,7 +1337,29 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                     }
                     app.tree_state.selected = 0;
                     app.tree_state.scroll_offset = 0;
+                    app.tree_state.init_hint_scope();
                     app.flash("collapsed all");
+                }
+                KeyCode::Char(ch @ '1'..='9') if !ctrl => {
+                    let n = (ch as usize) - ('1' as usize);
+                    if let Some(result) = app.tree_state.hint_enter(n) {
+                        match result {
+                            crate::ui::tree::HintResult::EnteredFolder => {
+                                if let Some(ref git) = app.git_info {
+                                    app.tree_state.apply_git_statuses(git);
+                                }
+                            }
+                            crate::ui::tree::HintResult::OpenFile(path) => {
+                                let _ = app.open_file(&path);
+                                if !app.side_panel_open {
+                                    app.popup = Popup::None;
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyCode::Backspace if !ctrl => {
+                    app.tree_state.hint_back();
                 }
                 _ => {}
             }
@@ -1581,10 +1721,7 @@ fn handle_mouse(app: &mut App, mouse: crossterm::event::MouseEvent) {
         MouseEventKind::ScrollDown => match app.popup {
             Popup::FileTree => {
                 let tree_area = file_tree_popup_area(full_area);
-                let visible = crate::ui::tree::tree_list_height(
-                    tree_area,
-                    app.tree_state.action != crate::ui::tree::TreeAction::None,
-                );
+                let visible = crate::ui::tree::tree_list_height(tree_area);
                 app.tree_state.move_down(visible);
             }
             Popup::FuzzyFinder => {

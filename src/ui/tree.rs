@@ -29,12 +29,31 @@ pub struct TreeEntry {
     pub file_size: Option<u64>,
 }
 
-pub fn format_item_count(count: u64) -> String {
-    if count == 1 {
-        "1 item".to_string()
+pub fn format_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{}B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1}K", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0))
     } else {
-        format!("{} items", count)
+        format!("{:.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
     }
+}
+
+fn dir_size(path: &Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                total += std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+            } else if p.is_dir() {
+                total += dir_size(&p);
+            }
+        }
+    }
+    total
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,6 +78,8 @@ pub struct TreeState {
     pub fs_undo_stack: Vec<FsOperation>,
     pub fs_redo_stack: Vec<FsOperation>,
     folder_color_idx: usize,
+    pub hint_scope: Option<PathBuf>,
+    pub hint_indices: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +103,12 @@ pub enum FsOperation {
     },
 }
 
+#[derive(Debug, Clone)]
+pub enum HintResult {
+    EnteredFolder,
+    OpenFile(PathBuf),
+}
+
 impl Default for TreeAction {
     fn default() -> Self {
         TreeAction::None
@@ -92,6 +119,90 @@ impl TreeState {
     fn push_fs_op(&mut self, op: FsOperation) {
         self.fs_undo_stack.push(op);
         self.fs_redo_stack.clear();
+    }
+
+    pub fn compute_hints(&mut self) {
+        self.hint_indices.clear();
+        let scope = self.hint_scope.clone().or_else(|| self.root.clone());
+        let scope = match scope {
+            Some(s) => s,
+            None => return,
+        };
+
+        for (i, entry) in self.entries.iter().enumerate() {
+            if i == 0 && entry.path == scope {
+                continue;
+            }
+            if entry.path.parent() == Some(&scope) {
+                self.hint_indices.push(i);
+                if self.hint_indices.len() >= 9 {
+                    break;
+                }
+            }
+        }
+    }
+
+    pub fn init_hint_scope(&mut self) {
+        self.hint_scope = self.root.clone();
+        self.compute_hints();
+    }
+
+    pub fn hint_enter(&mut self, n: usize) -> Option<HintResult> {
+        let &entry_idx = self.hint_indices.get(n)?;
+        let entry = self.entries.get(entry_idx)?;
+        let path = entry.path.clone();
+        let is_dir = entry.is_dir;
+
+        if is_dir {
+            if !self.open_dirs.contains(&path) {
+                self.open_dirs.insert(path.clone());
+                if let Some(root) = self.root.clone() {
+                    self.build(&root);
+                }
+            }
+            // re-find the folder index after rebuild
+            for (i, e) in self.entries.iter().enumerate() {
+                if e.path == path {
+                    self.selected = i;
+                    break;
+                }
+            }
+            self.hint_scope = Some(path);
+            self.compute_hints();
+            Some(HintResult::EnteredFolder)
+        } else {
+            self.selected = entry_idx;
+            Some(HintResult::OpenFile(path))
+        }
+    }
+
+    pub fn hint_back(&mut self) {
+        let scope = match &self.hint_scope {
+            Some(s) => s.clone(),
+            None => return,
+        };
+        let root = match &self.root {
+            Some(r) => r.clone(),
+            None => return,
+        };
+        if scope == root {
+            return;
+        }
+        if let Some(parent) = scope.parent() {
+            self.hint_scope = Some(parent.to_path_buf());
+            // select the folder we just came from
+            for (i, entry) in self.entries.iter().enumerate() {
+                if entry.path == scope {
+                    self.selected = i;
+                    break;
+                }
+            }
+            self.compute_hints();
+        }
+    }
+
+    pub fn hint_index_for_entry(&self, entry_idx: usize) -> Option<usize> {
+        self.hint_indices.iter().position(|&i| i == entry_idx)
     }
 
     pub fn build(&mut self, root: &Path) {
@@ -117,6 +228,7 @@ impl TreeState {
         });
 
         self.build_dir(root, root, 0);
+        self.compute_hints();
     }
 
     pub fn reveal_path(&mut self, target: &Path) {
@@ -240,9 +352,7 @@ impl TreeState {
             };
 
             let file_size = if is_dir {
-                std::fs::read_dir(&child)
-                    .ok()
-                    .map(|entries| entries.count() as u64)
+                Some(dir_size(&child))
             } else {
                 None
             };
@@ -748,11 +858,11 @@ pub fn tree_inner_area(area: Rect) -> Rect {
     )
 }
 
-pub fn tree_list_height(area: Rect, has_action: bool) -> usize {
+pub fn tree_list_height(area: Rect) -> usize {
     let inner_height = tree_inner_area(area).height as usize;
     inner_height
         .saturating_sub(1) // title row
-        .saturating_sub(usize::from(has_action)) // optional action row
+        .saturating_sub(1) // hint bar / action row
 }
 
 impl<'a> Widget for FileTreeWidget<'a> {
@@ -884,7 +994,12 @@ impl<'a> Widget for FileTreeWidget<'a> {
 
         // entries (skip index 0 = root, it's rendered as the title)
         let entries_start = 1usize;
-        for i in 0..tree_list_height(area, self.state.action != TreeAction::None) {
+        let guide_dim = Color::Rgb(
+            match dim { Color::Rgb(r, _, _) => r.saturating_sub(10), _ => 50 },
+            match dim { Color::Rgb(_, g, _) => g.saturating_sub(10), _ => 50 },
+            match dim { Color::Rgb(_, _, b) => b.saturating_sub(10), _ => 60 },
+        );
+        for i in 0..tree_list_height(area) {
             let entry_idx = self.state.scroll_offset + i + 1; // +1 to skip root
             let y = inner.y + (entries_start + i) as u16;
             if y >= inner.y + inner.height {
@@ -927,12 +1042,6 @@ impl<'a> Widget for FileTreeWidget<'a> {
                 let name_start = icon_end;
                 let name_end = name_start + entry.name.len();
 
-                let guide_dim = Color::Rgb(
-                    match dim { Color::Rgb(r, _, _) => r.saturating_sub(10), _ => 50 },
-                    match dim { Color::Rgb(_, g, _) => g.saturating_sub(10), _ => 50 },
-                    match dim { Color::Rgb(_, _, b) => b.saturating_sub(10), _ => 60 },
-                );
-
                 let mut cx = inner.x;
                 for (ci, ch) in display.chars().enumerate() {
                     if cx >= inner.x + inner.width {
@@ -966,9 +1075,23 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     cx += 1;
                 }
 
-                // file size (right-aligned, dim)
-                if let Some(size) = entry.file_size {
-                    let size_str = format_item_count(size);
+                // right-aligned: hint key or file size
+                let hint_key = self
+                    .state
+                    .hint_index_for_entry(entry_idx)
+                    .map(|n| format!("{}", n + 1));
+                let is_scope_parent = {
+                    let scope = self.state.hint_scope.as_ref().or(self.state.root.as_ref());
+                    let is_root = self.state.root.as_ref().map(|r| *r == entry.path).unwrap_or(false);
+                    scope.map_or(false, |s| entry.path == *s) && !is_root
+                };
+
+                let right_label: Option<(&str, Color)> = if let Some(ref k) = hint_key {
+                    Some((k.as_str(), dim))
+                } else if is_scope_parent {
+                    Some(("⌫", dim))
+                } else if let Some(size) = entry.file_size {
+                    let size_str = format_size(size);
                     let size_x = inner.x + inner.width - size_str.len() as u16 - 1;
                     if size_x > cx {
                         let mut sx = size_x;
@@ -983,6 +1106,132 @@ impl<'a> Widget for FileTreeWidget<'a> {
                             sx += 1;
                         }
                     }
+                    None
+                } else {
+                    None
+                };
+
+                if let Some((label, color)) = right_label {
+                    let label_x = inner.x + inner.width - label.chars().count() as u16 - 1;
+                    if label_x > cx {
+                        let mut sx = label_x;
+                        for ch in label.chars() {
+                            if sx >= inner.x + inner.width {
+                                break;
+                            }
+                            buf.cell_mut((sx, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(Style::default().fg(color).bg(line_bg));
+                            });
+                            sx += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        // hint bar at bottom
+        if self.state.action == TreeAction::None {
+            let hint_y = inner.y + inner.height - 1;
+
+            // fill bg
+            for lx in inner.x..inner.x + inner.width {
+                buf.cell_mut((lx, hint_y)).map(|cell| {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(bg));
+                });
+            }
+
+            let is_at_root = self.state.hint_scope.as_ref() == self.state.root.as_ref()
+                || self.state.hint_scope.is_none();
+
+            let mut hints: Vec<(&str, &str)> = Vec::new();
+            if !self.state.hint_indices.is_empty() {
+                let max_n = self.state.hint_indices.len();
+                if max_n == 1 {
+                    hints.push(("1", "jump"));
+                } else {
+                    // we'll handle this with a custom label below
+                    hints.push(("", "")); // placeholder
+                }
+            }
+            if !is_at_root {
+                hints.push(("⌫", "back"));
+            }
+            hints.push(("n", "new"));
+            hints.push(("r", "rename"));
+            hints.push(("d", "del"));
+            hints.push(("z", "collapse"));
+
+            // build the hint string manually for the range label
+            let key_fg = self.theme.fg();
+            let desc_fg = dim;
+            let mut cx = inner.x + 1;
+
+            for (i, (key, desc)) in hints.iter().enumerate() {
+                if cx >= inner.x + inner.width - 1 {
+                    break;
+                }
+
+                // special case: range label for jump
+                let key_str = if i == 0 && !self.state.hint_indices.is_empty() {
+                    let max_n = self.state.hint_indices.len();
+                    if max_n == 1 {
+                        "1".to_string()
+                    } else {
+                        format!("1-{}", max_n)
+                    }
+                } else {
+                    key.to_string()
+                };
+
+                let desc_str = if i == 0 && !self.state.hint_indices.is_empty() {
+                    "jump"
+                } else {
+                    desc
+                };
+
+                if key_str.is_empty() && desc_str.is_empty() {
+                    continue;
+                }
+
+                // key part
+                for ch in key_str.chars() {
+                    if cx >= inner.x + inner.width - 1 {
+                        break;
+                    }
+                    buf.cell_mut((cx, hint_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(key_fg).bg(bg));
+                    });
+                    cx += 1;
+                }
+
+                // space
+                if cx < inner.x + inner.width - 1 {
+                    cx += 1;
+                }
+
+                // desc part
+                for ch in desc_str.chars() {
+                    if cx >= inner.x + inner.width - 1 {
+                        break;
+                    }
+                    buf.cell_mut((cx, hint_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(desc_fg).bg(bg));
+                    });
+                    cx += 1;
+                }
+
+                // separator
+                if cx + 2 < inner.x + inner.width - 1 {
+                    cx += 1;
+                    buf.cell_mut((cx, hint_y)).map(|cell| {
+                        cell.set_char('│');
+                        cell.set_style(Style::default().fg(guide_dim).bg(bg));
+                    });
+                    cx += 2;
                 }
             }
         }

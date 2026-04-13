@@ -1,16 +1,7 @@
 use ratatui::buffer::Buffer as RatBuffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
-
-const PENGUIN: &[&str] = &[
-    "      .-\"\"\"-.     ",
-    "     /        \\    ",
-    "    |  ○    ○  |   ",
-    "    |    ▼     |   ",
-    "     \\  .__,  /    ",
-    "      '-.__.-'     ",
-];
 
 const TITLE: &str = "reedo";
 
@@ -34,8 +25,6 @@ impl<'a> Widget for WelcomeScreen<'a> {
         let accent = self.theme.popup_accent();
         let dim = self.theme.popup_dim();
         let fg = self.theme.fg();
-        let keyword = Color::Rgb(255, 158, 100);
-
         // fill bg with theme color
         for y in area.y..area.y + area.height {
             for x in area.x..area.x + area.width {
@@ -46,38 +35,11 @@ impl<'a> Widget for WelcomeScreen<'a> {
             }
         }
 
-        let total_lines = PENGUIN.len() + 2 + HINTS.len() + 1;
+        let total_lines = 1 + 2 + HINTS.len();
         let start_y = area.y + area.height.saturating_sub(total_lines as u16) / 3;
 
-        // penguin
-        let penguin_width = PENGUIN.iter().map(|l| l.chars().count()).max().unwrap_or(0) as u16;
-        let penguin_x = area.x + area.width.saturating_sub(penguin_width) / 2;
-
-        for (i, line) in PENGUIN.iter().enumerate() {
-            let y = start_y + i as u16;
-            if y >= area.y + area.height {
-                break;
-            }
-            let mut x = penguin_x;
-            for ch in line.chars() {
-                if x >= area.x + area.width {
-                    break;
-                }
-                let color = match ch {
-                    '○' => accent,
-                    '▼' => keyword,
-                    _ => fg,
-                };
-                buf.cell_mut((x, y)).map(|cell| {
-                    cell.set_char(ch);
-                    cell.set_style(Style::default().fg(color).bg(bg));
-                });
-                x += 1;
-            }
-        }
-
         // title
-        let title_y = start_y + PENGUIN.len() as u16 + 1;
+        let title_y = start_y;
         if title_y < area.y + area.height {
             let title_x = area.x + area.width.saturating_sub(TITLE.len() as u16) / 2;
             let mut x = title_x;
