@@ -2,7 +2,6 @@ pub mod fuzzy;
 pub mod keybind_help;
 pub mod render;
 pub mod replace;
-pub mod replace_project;
 pub mod search;
 pub mod search_project;
 pub mod statusbar;

@@ -286,60 +286,105 @@ pub fn markdown_style_for_line(
         return None;
     }
 
-    // find leading whitespace count
     let leading = chars.iter().take_while(|c| c.is_whitespace()).count();
     let trimmed_start = leading;
 
-    // fenced code block delimiter
+    // fenced code block delimiter (``` with optional language tag)
     if len >= trimmed_start + 3
         && chars[trimmed_start] == '`'
         && chars.get(trimmed_start + 1) == Some(&'`')
         && chars.get(trimmed_start + 2) == Some(&'`')
     {
         return Some(HighlightStyle {
-            fg: Color::Rgb(166, 227, 161),
+            fg: Color::Rgb(116, 199, 236),
             bold: false,
         });
     }
 
     if in_code_block {
         return Some(HighlightStyle {
-            fg: Color::Rgb(158, 206, 106),
+            fg: Color::Rgb(166, 227, 161),
             bold: false,
         });
     }
 
-    // headings
+    // horizontal rule (---, ***, ___)
+    if trimmed_start < len {
+        let rest: String = chars[trimmed_start..].iter().collect();
+        let trimmed = rest.trim();
+        if trimmed.len() >= 3
+            && (trimmed.chars().all(|c| c == '-' || c == ' ')
+                || trimmed.chars().all(|c| c == '*' || c == ' ')
+                || trimmed.chars().all(|c| c == '_' || c == ' '))
+            && trimmed.chars().filter(|c| !c.is_whitespace()).count() >= 3
+        {
+            return Some(HighlightStyle {
+                fg: Color::Rgb(69, 71, 90),
+                bold: false,
+            });
+        }
+    }
+
+    // headings: different color per level for visual hierarchy
     if trimmed_start < len && chars[trimmed_start] == '#' {
         let hash_count = chars[trimmed_start..]
             .iter()
             .take_while(|&&c| c == '#')
             .count();
         if hash_count <= 6 && chars.get(trimmed_start + hash_count) == Some(&' ') {
-            return Some(HighlightStyle {
-                fg: Color::Rgb(187, 154, 247),
-                bold: true,
-            });
+            let (fg, bold) = match hash_count {
+                1 => (Color::Rgb(255, 158, 100), true),  // h1: bright orange, bold
+                2 => (Color::Rgb(187, 154, 247), true),  // h2: purple, bold
+                3 => (Color::Rgb(137, 180, 250), true),  // h3: blue, bold
+                4 => (Color::Rgb(148, 226, 213), false),  // h4: teal
+                5 => (Color::Rgb(166, 227, 161), false),  // h5: green
+                _ => (Color::Rgb(203, 166, 247), false),  // h6: mauve
+            };
+            return Some(HighlightStyle { fg, bold });
         }
     }
 
-    // blockquote
+    // blockquote — entire line dimmed with a subtle accent on the >
     if trimmed_start < len && chars[trimmed_start] == '>' {
+        if col == trimmed_start {
+            return Some(HighlightStyle {
+                fg: Color::Rgb(137, 180, 250),
+                bold: true,
+            });
+        }
         return Some(HighlightStyle {
-            fg: Color::Rgb(86, 95, 137),
+            fg: Color::Rgb(108, 112, 134),
             bold: false,
         });
     }
 
-    // list markers
+    // list markers: - * + and numbered lists
     if trimmed_start < len {
         let c = chars[trimmed_start];
+        // bullet lists
         if (c == '-' || c == '*' || c == '+') && chars.get(trimmed_start + 1) == Some(&' ') {
             if col <= trimmed_start + 1 {
                 return Some(HighlightStyle {
-                    fg: Color::Rgb(137, 180, 250),
+                    fg: Color::Rgb(148, 226, 213),
                     bold: true,
                 });
+            }
+        }
+        // numbered lists (1. 2. etc)
+        if c.is_ascii_digit() {
+            let num_end = chars[trimmed_start..]
+                .iter()
+                .take_while(|c| c.is_ascii_digit())
+                .count();
+            if chars.get(trimmed_start + num_end) == Some(&'.')
+                && chars.get(trimmed_start + num_end + 1) == Some(&' ')
+            {
+                if col <= trimmed_start + num_end + 1 {
+                    return Some(HighlightStyle {
+                        fg: Color::Rgb(148, 226, 213),
+                        bold: true,
+                    });
+                }
             }
         }
     }
@@ -388,13 +433,65 @@ pub fn markdown_style_for_line(
         }
     }
 
+    // italic *...*  (single asterisk, not inside bold)
+    let mut i = 0;
+    while i < len {
+        if chars[i] == '*' && (i + 1 >= len || chars[i + 1] != '*') {
+            // check it's not part of **
+            if i > 0 && chars[i - 1] == '*' {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            i += 1;
+            while i < len {
+                if chars[i] == '*' && (i + 1 >= len || chars[i + 1] != '*') {
+                    if col >= start && col <= i {
+                        return Some(HighlightStyle {
+                            fg: Color::Rgb(245, 194, 231),
+                            bold: false,
+                        });
+                    }
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    // strikethrough ~~...~~
+    let mut i = 0;
+    while i + 1 < len {
+        if chars[i] == '~' && chars[i + 1] == '~' {
+            let start = i;
+            i += 2;
+            while i + 1 < len {
+                if chars[i] == '~' && chars[i + 1] == '~' {
+                    if col >= start && col <= i + 1 {
+                        return Some(HighlightStyle {
+                            fg: Color::Rgb(86, 95, 137),
+                            bold: false,
+                        });
+                    }
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
     // links [text](url)
     let mut i = 0;
     while i < len {
         if chars[i] == '[' {
             let link_start = i;
             i += 1;
-            // find ](
             while i + 1 < len {
                 if chars[i] == ']' && chars.get(i + 1) == Some(&'(') {
                     let bracket_end = i;
@@ -403,14 +500,12 @@ pub fn markdown_style_for_line(
                         i += 1;
                     }
                     if i < len {
-                        // col in [text] part
                         if col >= link_start && col <= bracket_end {
                             return Some(HighlightStyle {
                                 fg: Color::Rgb(137, 180, 250),
                                 bold: false,
                             });
                         }
-                        // col in (url) part
                         if col > bracket_end && col <= i {
                             return Some(HighlightStyle {
                                 fg: Color::Rgb(86, 95, 137),

@@ -4,11 +4,27 @@ use std::path::PathBuf;
 use crate::editor::cursor::Position;
 use crate::editor::undo::{Operation, UndoStack};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LineEnding {
+    LF,
+    CRLF,
+}
+
+impl LineEnding {
+    pub fn label(&self) -> &str {
+        match self {
+            LineEnding::LF => "LF",
+            LineEnding::CRLF => "CRLF",
+        }
+    }
+}
+
 pub struct Buffer {
     pub rope: Rope,
     pub file_path: Option<PathBuf>,
     pub dirty: bool,
     pub undo_stack: UndoStack,
+    pub line_ending: LineEnding,
 }
 
 impl Default for Buffer {
@@ -18,29 +34,68 @@ impl Default for Buffer {
             file_path: None,
             dirty: false,
             undo_stack: UndoStack::default(),
+            line_ending: LineEnding::LF,
         }
     }
 }
 
 impl Buffer {
     pub fn from_file(path: &std::path::Path) -> std::io::Result<Self> {
-        let text = std::fs::read_to_string(path)?;
+        let raw = std::fs::read_to_string(path)?;
+        let line_ending = if raw.contains("\r\n") {
+            LineEnding::CRLF
+        } else {
+            LineEnding::LF
+        };
+        let text = raw.replace("\r\n", "\n");
         Ok(Self {
             rope: Rope::from_str(&text),
             file_path: Some(path.to_path_buf()),
             dirty: false,
             undo_stack: UndoStack::default(),
+            line_ending,
         })
     }
 
     pub fn save(&mut self) -> std::io::Result<()> {
-        if let Some(ref path) = self.file_path {
-            let text = self.rope.to_string();
-            std::fs::write(path, &text)?;
-            self.dirty = false;
-            tracing::info!("saved file: {}", path.display());
+        let path = match self.file_path.clone() {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+        self.strip_trailing_whitespace();
+        let mut text = self.rope.to_string();
+        if !text.ends_with('\n') {
+            text.push('\n');
         }
+        if self.line_ending == LineEnding::CRLF {
+            text = text.replace('\n', "\r\n");
+        }
+        std::fs::write(&path, &text)?;
+        self.dirty = false;
+        tracing::info!("saved file: {}", path.display());
         Ok(())
+    }
+
+    fn strip_trailing_whitespace(&mut self) {
+        let line_count = self.rope.len_lines();
+        for line_idx in (0..line_count).rev() {
+            let line_start = self.rope.line_to_char(line_idx);
+            let line_slice = self.rope.line(line_idx);
+            let line_str = line_slice.to_string();
+            let trimmed = line_str.trim_end_matches(|c: char| c == ' ' || c == '\t');
+            let trailing = line_str.len() - trimmed.len();
+            // don't strip the newline itself
+            let trailing = if line_str.ends_with('\n') {
+                trailing.saturating_sub(1)
+            } else {
+                trailing
+            };
+            if trailing > 0 {
+                let trim_start = line_start + trimmed.len();
+                let trim_end = trim_start + trailing;
+                self.rope.remove(trim_start..trim_end);
+            }
+        }
     }
 
     pub fn line_count(&self) -> usize {

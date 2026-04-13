@@ -12,7 +12,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     let ctrl_alt = ctrl && alt;
     let ctrl_shift = ctrl && shift;
 
-    // clear pending key if the next key isn't completing a sequence
     let is_pending_completion = app.mode == Mode::Normal
         && !ctrl
         && matches!(key.code, KeyCode::Char(c) if
@@ -23,20 +22,18 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
     }
 
     match key.code {
-        // mode switching
         KeyCode::Esc => {
             app.buffer.undo_stack.finish_group();
             app.mode = Mode::Normal;
             app.cursor.clear_selection();
-            tracing::debug!("mode -> Normal");
+            // clear persistent search highlights
+            app.search_state.matches.clear();
         }
         KeyCode::Char('i') if app.mode == Mode::Normal && !ctrl => {
             app.mode = Mode::Insert;
-            tracing::debug!("mode -> Insert");
         }
         KeyCode::Insert if app.mode == Mode::Normal => {
             app.mode = Mode::Insert;
-            tracing::debug!("mode -> Insert (Insert key)");
         }
 
         KeyCode::Char('z') if ctrl => {
@@ -54,28 +51,29 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // ctrl+a select all
         KeyCode::Char('a') if ctrl => {
             let last_line = app.buffer.line_count().saturating_sub(1);
             let last_col = app.buffer.line_len(last_line);
             app.cursor.select_all(last_line, last_col);
-            tracing::debug!("select all");
         }
 
-        // ctrl+s save (manual, in addition to autosave)
         KeyCode::Char('s') if ctrl => {
             if let Err(e) = app.buffer.save() {
                 tracing::error!("save failed: {}", e);
-                app.flash("save failed");
+                app.flash(format!("save failed: {}", e));
             } else {
                 if let Some(ref p) = app.buffer.file_path {
                     app.last_file_mtime = std::fs::metadata(p).ok().and_then(|m| m.modified().ok());
+                    crate::config::settings::Settings::save_session(
+                        p,
+                        app.cursor.pos.line,
+                        app.cursor.pos.col,
+                    );
                 }
                 app.flash("saved");
             }
         }
 
-        // clipboard: ctrl+c copy
         KeyCode::Char('c' | 'C') if ctrl => {
             if let Some(sel) = &app.cursor.selection {
                 let start = sel.start();
@@ -87,7 +85,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.yank_buffer = Some(text);
             }
         }
-        // clipboard: ctrl+x cut
         KeyCode::Char('x') if ctrl => {
             if let Some(sel) = app.cursor.selection.take() {
                 let start = sel.start();
@@ -102,12 +99,12 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.mark_edited();
             }
         }
-        // clipboard: ctrl+v paste
         KeyCode::Char('v') if ctrl => {
             if let Some(text) = clipboard::paste_from_clipboard() {
                 delete_selection_if_any(app);
+                let adjusted = smart_indent_paste(&text, app);
                 app.buffer.undo_stack.begin_group(app.cursor.pos);
-                let new_pos = app.buffer.insert_text(app.cursor.pos, &text);
+                let new_pos = app.buffer.insert_text(app.cursor.pos, &adjusted);
                 app.buffer.undo_stack.finish_group();
                 app.cursor.move_to(new_pos.line, new_pos.col, false);
                 app.cursor.update_desired_col();
@@ -115,7 +112,66 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
         }
 
-        // popup keybinds
+        // Ctrl+D: duplicate line
+        KeyCode::Char('d') if ctrl => {
+            let line = app.cursor.pos.line;
+            let text = app.buffer.line_text(line);
+            let dup = format!("\n{}", text);
+            let end_of_line = app.buffer.line_len(line);
+            let pos = crate::editor::cursor::Position::new(line, end_of_line);
+            app.buffer.undo_stack.begin_group(app.cursor.pos);
+            app.buffer.insert_text(pos, &dup);
+            app.buffer.undo_stack.finish_group();
+            app.cursor.move_to(line + 1, app.cursor.pos.col, false);
+            app.mark_edited();
+        }
+
+        // Ctrl+L: goto line
+        KeyCode::Char('l') if ctrl => {
+            app.popup = crate::app::Popup::GotoLine;
+            app.goto_line_input.clear();
+        }
+
+        // Ctrl+]: jump to matching bracket
+        KeyCode::Char(']') if ctrl => {
+            if let Some((line, col)) = brackets::find_matching_bracket(
+                &app.buffer,
+                app.cursor.pos.line,
+                app.cursor.pos.col,
+            ) {
+                app.cursor.move_to(line, col, false);
+                app.cursor.update_desired_col();
+            }
+        }
+
+        // Ctrl+/: toggle line comment
+        KeyCode::Char('/') if ctrl => {
+            toggle_line_comment(app);
+        }
+        KeyCode::Char('?') if ctrl => {
+            // some terminals send ? for ctrl+/
+            toggle_line_comment(app);
+        }
+
+        // F4: toggle side panel
+        KeyCode::F(4) => {
+            app.side_panel_open = !app.side_panel_open;
+            crate::config::settings::Settings::update_side_panel(app.side_panel_open);
+            if app.side_panel_open {
+                if let Some(root) = app.project_root.clone() {
+                    app.tree_state.build(&root);
+                    if let Some(ref git) = app.git_info {
+                        app.tree_state.apply_git_statuses(git);
+                    }
+                }
+            } else {
+                if app.popup == crate::app::Popup::FileTree {
+                    app.popup = crate::app::Popup::None;
+                }
+            }
+        }
+
+        // file tree
         KeyCode::Char('e') if ctrl || (app.mode == Mode::Normal && !shift) => {
             if app.popup == crate::app::Popup::FileTree {
                 app.popup = crate::app::Popup::None;
@@ -141,10 +197,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.replace_state.reset();
             app.popup = crate::app::Popup::Replace;
         }
-        KeyCode::Char('H') if ctrl => {
-            app.project_replace_state.reset();
-            app.popup = crate::app::Popup::ReplaceProject;
-        }
         KeyCode::Char('p') if ctrl => {
             app.fuzzy_state.reset();
             if let Some(root) = app.project_root.clone() {
@@ -160,18 +212,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.theme_switcher_state.reset();
             app.popup = crate::app::Popup::ThemeSwitcher;
         }
-        KeyCode::Char(']') if ctrl => {
-            app.padding_input = app.horizontal_padding.to_string();
-            app.popup = crate::app::Popup::PaddingInput;
-        }
-        KeyCode::Char('\x1d') => {
-            app.padding_input = app.horizontal_padding.to_string();
-            app.popup = crate::app::Popup::PaddingInput;
-        }
-        KeyCode::F(2) => {
-            app.padding_input = app.horizontal_padding.to_string();
-            app.popup = crate::app::Popup::PaddingInput;
-        }
         KeyCode::F(3) => {
             app.line_wrapping = !app.line_wrapping;
             if app.line_wrapping {
@@ -181,14 +221,38 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
                 app.flash("line wrapping off");
             }
         }
-        // keybind help — multiple bindings to cover terminal differences
-        KeyCode::Char('/') if ctrl => {
-            app.keybind_help_state.reset();
-            app.popup = crate::app::Popup::KeybindHelp;
+        KeyCode::F(5) => {
+            app.relative_line_numbers = !app.relative_line_numbers;
+            if app.relative_line_numbers {
+                app.flash("relative line numbers");
+            } else {
+                app.flash("absolute line numbers");
+            }
         }
-        KeyCode::Char('?') if ctrl => {
-            app.keybind_help_state.reset();
-            app.popup = crate::app::Popup::KeybindHelp;
+        KeyCode::F(6) => {
+            app.show_whitespace = !app.show_whitespace;
+            if app.show_whitespace {
+                app.flash("whitespace visible");
+            } else {
+                app.flash("whitespace hidden");
+            }
+        }
+        KeyCode::Char('r') if ctrl => {
+            app.popup = crate::app::Popup::RecentFiles;
+        }
+        KeyCode::Char('m') if ctrl => {
+            if app.side_panel_open {
+                app.side_panel_mode = match app.side_panel_mode {
+                    crate::app::SidePanelMode::FileTree => {
+                        app.flash("outline");
+                        crate::app::SidePanelMode::MarkdownOutline
+                    }
+                    crate::app::SidePanelMode::MarkdownOutline => {
+                        app.flash("file tree");
+                        crate::app::SidePanelMode::FileTree
+                    }
+                };
+            }
         }
         KeyCode::Char('?') if shift => {
             if app.mode == Mode::Normal {
@@ -205,6 +269,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.popup = crate::app::Popup::KeybindHelp;
         }
 
+        // Ctrl+Enter or F7: toggle markdown checkbox
+        KeyCode::Enter if ctrl => {
+            toggle_markdown_checkbox(app);
+        }
+
         // navigation: ctrl+alt+arrows = paragraph jump
         KeyCode::Up if ctrl_alt => {
             let new_line = find_prev_paragraph(app);
@@ -217,7 +286,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.cursor.update_desired_col();
         }
 
-        // navigation: ctrl+arrows = word jump
         KeyCode::Left if ctrl => {
             let (line, col) = find_prev_word(app);
             app.cursor.move_to(line, col, shift || ctrl_shift);
@@ -229,7 +297,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.cursor.update_desired_col();
         }
 
-        // navigation: arrows (with optional shift for selection)
         KeyCode::Left => {
             let (line, col) = if app.cursor.pos.col > 0 {
                 (app.cursor.pos.line, app.cursor.pos.col - 1)
@@ -280,7 +347,14 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.cursor.update_desired_col();
         }
         KeyCode::Home => {
-            app.cursor.move_to(app.cursor.pos.line, 0, shift);
+            let line_text = app.buffer.line_text(app.cursor.pos.line);
+            let first_non_ws = line_text.chars().take_while(|c| c.is_whitespace()).count();
+            let target = if app.cursor.pos.col == first_non_ws || first_non_ws == line_text.len() {
+                0
+            } else {
+                first_non_ws
+            };
+            app.cursor.move_to(app.cursor.pos.line, target, shift);
             app.cursor.update_desired_col();
         }
         KeyCode::End => {
@@ -299,7 +373,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.cursor.update_desired_col();
         }
 
-        // normal mode commands with pending key (dd, yy)
+        // normal mode: dd, yy, x, p, o, O
         KeyCode::Char('d') if app.mode == Mode::Normal && !ctrl => {
             if app.pending_key == Some('d') {
                 handle_normal_dd(app);
@@ -337,12 +411,10 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             handle_normal_o(app, true);
         }
 
-        // insert mode: typing — consecutive chars grouped into one undo batch
-        // group breaks on: space, Enter, Esc, navigation, mode switch
+        // insert mode typing
         KeyCode::Char(ch) if app.mode == Mode::Insert && !ctrl => {
             delete_selection_if_any(app);
 
-            // auto-close: if typing a closing bracket and it's already the next char, just skip over it
             if brackets::is_closing(ch) {
                 let line_text = app.buffer.line_text(app.cursor.pos.line);
                 let chars: Vec<char> = line_text.chars().collect();
@@ -359,13 +431,11 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
             let new_pos = app.buffer.insert_char(app.cursor.pos, ch);
 
-            // auto-close: insert matching bracket
             if let Some(closing) = brackets::closing_pair(ch) {
-                // for quotes, only auto-close if not already inside a pair
                 let should_close = if ch == '"' || ch == '\'' || ch == '`' {
                     let line_text = app.buffer.line_text(new_pos.line);
                     let count = line_text.chars().filter(|&c| c == ch).count();
-                    count % 2 != 0 // odd count means we just opened one
+                    count % 2 != 0
                 } else {
                     true
                 };
@@ -386,8 +456,6 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             app.buffer.undo_stack.finish_group();
             app.buffer.undo_stack.begin_group(app.cursor.pos);
 
-            // smart indent: detect current line's indentation
-            // check char before cursor (not end of line, due to auto-close brackets)
             let current_line = app.buffer.line_text(app.cursor.pos.line);
             let indent: String = current_line
                 .chars()
@@ -420,8 +488,26 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             if app.cursor.has_selection() {
                 delete_selection_if_any(app);
             } else {
+                // auto-pair delete: if between matching brackets, delete both
+                let col = app.cursor.pos.col;
+                let line_text = app.buffer.line_text(app.cursor.pos.line);
+                let chars: Vec<char> = line_text.chars().collect();
+                let is_pair = col > 0
+                    && col < chars.len()
+                    && brackets::closing_pair(chars[col - 1]) == Some(chars[col]);
+
                 app.buffer.undo_stack.begin_group(app.cursor.pos);
-                if let Some(new_pos) = app.buffer.delete_char_backward(app.cursor.pos) {
+                if is_pair {
+                    // delete the closer first (at col), then the opener (at col-1)
+                    app.buffer.delete_char_forward(crate::editor::cursor::Position::new(
+                        app.cursor.pos.line,
+                        col,
+                    ));
+                    if let Some(new_pos) = app.buffer.delete_char_backward(app.cursor.pos) {
+                        app.cursor.move_to(new_pos.line, new_pos.col, false);
+                        app.cursor.update_desired_col();
+                    }
+                } else if let Some(new_pos) = app.buffer.delete_char_backward(app.cursor.pos) {
                     app.cursor.move_to(new_pos.line, new_pos.col, false);
                     app.cursor.update_desired_col();
                 }
@@ -439,18 +525,27 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
             }
             app.mark_edited();
         }
+        KeyCode::Tab if app.mode == Mode::Insert && shift => {
+            // Shift+Tab: dedent selected lines (or current line)
+            indent_lines(app, false);
+        }
         KeyCode::Tab if app.mode == Mode::Insert => {
-            delete_selection_if_any(app);
-            app.buffer.undo_stack.begin_group(app.cursor.pos);
-            let spaces = " ".repeat(app.indent_size);
-            let new_pos = app.buffer.insert_text(app.cursor.pos, &spaces);
-            app.buffer.undo_stack.finish_group();
-            app.cursor.move_to(new_pos.line, new_pos.col, false);
-            app.cursor.update_desired_col();
-            app.mark_edited();
+            if app.cursor.has_selection() {
+                indent_lines(app, true);
+            } else {
+                app.buffer.undo_stack.begin_group(app.cursor.pos);
+                let spaces = " ".repeat(app.indent_size);
+                let new_pos = app.buffer.insert_text(app.cursor.pos, &spaces);
+                app.buffer.undo_stack.finish_group();
+                app.cursor.move_to(new_pos.line, new_pos.col, false);
+                app.cursor.update_desired_col();
+                app.mark_edited();
+            }
+        }
+        KeyCode::BackTab if app.mode == Mode::Insert => {
+            indent_lines(app, false);
         }
 
-        // ctrl+w / ctrl+backspace: delete word backward
         KeyCode::Char('w') if ctrl && app.mode == Mode::Insert => {
             delete_word_backward(app);
         }
@@ -489,7 +584,6 @@ fn delete_word_backward(app: &mut App) {
 }
 
 fn handle_normal_dd(app: &mut App) {
-    // dd: delete current line, yank it
     let line = app.cursor.pos.line;
     let line_count = app.buffer.line_count();
     if line_count == 0 {
@@ -515,7 +609,6 @@ fn handle_normal_dd(app: &mut App) {
         } else {
             app.buffer.rope.len_chars()
         };
-        // also remove preceding newline if deleting last line
         let actual_start = if line == line_count - 1 && line > 0 {
             start_idx - 1
         } else {
@@ -539,14 +632,12 @@ fn handle_normal_yy(app: &mut App) {
     let line = app.cursor.pos.line;
     let line_text = app.buffer.line_text(line);
     app.yank_buffer = Some(format!("{}\n", line_text));
-    tracing::debug!("yy yanked line {}", line);
 }
 
 fn handle_normal_paste(app: &mut App) {
     if let Some(text) = app.yank_buffer.clone() {
         app.buffer.undo_stack.begin_group(app.cursor.pos);
         if text.ends_with('\n') {
-            // line-wise paste: insert below current line
             let line = app.cursor.pos.line;
             let insert_line = line + 1;
             let idx = if insert_line >= app.buffer.line_count() {
@@ -611,17 +702,14 @@ fn find_prev_word(app: &App) -> (usize, usize) {
     let chars: Vec<char> = text.chars().collect();
     let mut i = col.min(chars.len());
 
-    // skip whitespace
     while i > 0 && chars[i - 1].is_whitespace() {
         i -= 1;
     }
-    // skip word chars
     if i > 0 && chars[i - 1].is_alphanumeric() || (i > 0 && chars[i - 1] == '_') {
         while i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == '_') {
             i -= 1;
         }
     } else if i > 0 {
-        // skip punctuation
         while i > 0
             && !chars[i - 1].is_alphanumeric()
             && chars[i - 1] != '_'
@@ -650,7 +738,6 @@ fn find_next_word(app: &App) -> (usize, usize) {
 
     let mut i = col;
 
-    // skip current word chars
     if chars[i].is_alphanumeric() || chars[i] == '_' {
         while i < len && (chars[i].is_alphanumeric() || chars[i] == '_') {
             i += 1;
@@ -662,7 +749,6 @@ fn find_next_word(app: &App) -> (usize, usize) {
         }
     }
 
-    // skip whitespace
     while i < len && chars[i].is_whitespace() {
         i += 1;
     }
@@ -672,11 +758,9 @@ fn find_next_word(app: &App) -> (usize, usize) {
 
 fn find_prev_paragraph(app: &App) -> usize {
     let mut line = app.cursor.pos.line;
-    // skip current blank lines
     while line > 0 && app.buffer.line_len(line) == 0 {
         line -= 1;
     }
-    // find previous blank line
     while line > 0 && app.buffer.line_len(line) > 0 {
         line -= 1;
     }
@@ -686,13 +770,174 @@ fn find_prev_paragraph(app: &App) -> usize {
 fn find_next_paragraph(app: &App) -> usize {
     let max = app.buffer.line_count().saturating_sub(1);
     let mut line = app.cursor.pos.line;
-    // skip current non-blank lines
     while line < max && app.buffer.line_len(line) > 0 {
         line += 1;
     }
-    // skip blank lines
     while line < max && app.buffer.line_len(line) == 0 {
         line += 1;
     }
     line
+}
+
+fn indent_lines(app: &mut App, indent: bool) {
+    let (start_line, end_line) = if let Some(sel) = &app.cursor.selection {
+        let s = sel.start();
+        let e = sel.end();
+        (s.line, e.line)
+    } else {
+        (app.cursor.pos.line, app.cursor.pos.line)
+    };
+
+    app.buffer.undo_stack.begin_group(app.cursor.pos);
+    let spaces = " ".repeat(app.indent_size);
+
+    for line in start_line..=end_line {
+        if indent {
+            let pos = crate::editor::cursor::Position::new(line, 0);
+            app.buffer.insert_text(pos, &spaces);
+        } else {
+            let text = app.buffer.line_text(line);
+            let leading: usize = text.chars().take_while(|c| *c == ' ').count();
+            let remove = leading.min(app.indent_size);
+            if remove > 0 {
+                let start = crate::editor::cursor::Position::new(line, 0);
+                let end = crate::editor::cursor::Position::new(line, remove);
+                app.buffer.delete_range(start, end);
+            }
+        }
+    }
+    app.buffer.undo_stack.finish_group();
+    app.mark_edited();
+}
+
+fn toggle_line_comment(app: &mut App) {
+    let ext = app
+        .buffer
+        .file_path
+        .as_ref()
+        .and_then(|p| p.extension())
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    let prefix = match ext {
+        "rs" | "js" | "mjs" | "cjs" | "ts" | "tsx" | "c" | "h" | "go" | "zig" | "css"
+        | "scss" | "json" | "java" => "// ",
+        "py" | "sh" | "bash" | "zsh" | "yaml" | "yml" | "toml" | "rb" | "ruby" | "conf" => "# ",
+        "lua" | "sql" => "-- ",
+        "html" | "htm" => "<!-- ",
+        _ => "// ",
+    };
+
+    let (start_line, end_line) = if let Some(sel) = &app.cursor.selection {
+        let s = sel.start();
+        let e = sel.end();
+        (s.line, e.line)
+    } else {
+        (app.cursor.pos.line, app.cursor.pos.line)
+    };
+
+    // check if all lines are already commented
+    let all_commented = (start_line..=end_line).all(|line| {
+        let text = app.buffer.line_text(line);
+        text.trim_start().starts_with(prefix.trim_end())
+    });
+
+    app.buffer.undo_stack.begin_group(app.cursor.pos);
+
+    for line in start_line..=end_line {
+        if all_commented {
+            let text = app.buffer.line_text(line);
+            let leading_ws: usize = text.chars().take_while(|c| c.is_whitespace()).count();
+            let after_ws = &text[leading_ws..];
+            if after_ws.starts_with(prefix) {
+                let start = crate::editor::cursor::Position::new(line, leading_ws);
+                let end =
+                    crate::editor::cursor::Position::new(line, leading_ws + prefix.len());
+                app.buffer.delete_range(start, end);
+            } else if after_ws.starts_with(prefix.trim_end()) {
+                let p = prefix.trim_end();
+                let start = crate::editor::cursor::Position::new(line, leading_ws);
+                let end = crate::editor::cursor::Position::new(line, leading_ws + p.len());
+                app.buffer.delete_range(start, end);
+            }
+        } else {
+            let text = app.buffer.line_text(line);
+            let leading_ws: usize = text.chars().take_while(|c| c.is_whitespace()).count();
+            let pos = crate::editor::cursor::Position::new(line, leading_ws);
+            app.buffer.insert_text(pos, prefix);
+        }
+    }
+
+    app.buffer.undo_stack.finish_group();
+    app.mark_edited();
+}
+
+fn smart_indent_paste(text: &str, app: &App) -> String {
+    let lines: Vec<&str> = text.split('\n').collect();
+    if lines.len() <= 1 {
+        return text.to_string();
+    }
+
+    // detect the indent of the first non-empty pasted line
+    let paste_indent = lines
+        .iter()
+        .find(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .unwrap_or(0);
+
+    // target indent = current line's indent
+    let current_line = app.buffer.line_text(app.cursor.pos.line);
+    let target_indent = current_line.len() - current_line.trim_start().len();
+
+    if paste_indent == target_indent {
+        return text.to_string();
+    }
+
+    let diff = target_indent as i64 - paste_indent as i64;
+    let indent_str = " ".repeat(diff.unsigned_abs() as usize);
+
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            if i == 0 {
+                // first line pastes at cursor — don't adjust it
+                line.to_string()
+            } else if line.trim().is_empty() {
+                String::new()
+            } else if diff > 0 {
+                format!("{}{}", indent_str, line)
+            } else {
+                let strip = (diff.unsigned_abs() as usize).min(line.len() - line.trim_start().len());
+                line[strip..].to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn toggle_markdown_checkbox(app: &mut App) {
+    let line = app.cursor.pos.line;
+    let text = app.buffer.line_text(line);
+    let trimmed = text.trim_start();
+
+    if trimmed.starts_with("- [ ] ") {
+        let offset = text.len() - trimmed.len();
+        let start = crate::editor::cursor::Position::new(line, offset + 2);
+        let end = crate::editor::cursor::Position::new(line, offset + 5);
+        app.buffer.undo_stack.begin_group(app.cursor.pos);
+        app.buffer.delete_range(start, end);
+        app.buffer.insert_text(start, "[x]");
+        app.buffer.undo_stack.finish_group();
+        app.mark_edited();
+    } else if trimmed.starts_with("- [x] ") || trimmed.starts_with("- [X] ") {
+        let offset = text.len() - trimmed.len();
+        let start = crate::editor::cursor::Position::new(line, offset + 2);
+        let end = crate::editor::cursor::Position::new(line, offset + 5);
+        app.buffer.undo_stack.begin_group(app.cursor.pos);
+        app.buffer.delete_range(start, end);
+        app.buffer.insert_text(start, "[ ]");
+        app.buffer.undo_stack.finish_group();
+        app.mark_edited();
+    }
 }

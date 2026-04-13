@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require("child_process");
+const { join } = require("path");
+
+const PLATFORMS = {
+  "darwin-arm64": "@reedo/darwin-arm64",
+  "darwin-x64": "@reedo/darwin-x64",
+  "linux-x64": "@reedo/linux-x64-gnu",
+  "linux-arm64": "@reedo/linux-arm64-gnu",
+  "win32-x64": "@reedo/win32-x64",
+};
+
+const key = `${process.platform}-${process.arch}`;
+const pkg = PLATFORMS[key];
+
+if (!pkg) {
+  console.error(
+    `reedo: unsupported platform ${process.platform}-${process.arch}`
+  );
+  process.exit(1);
+}
+
+const ext = process.platform === "win32" ? ".exe" : "";
+let bin;
+
+try {
+  bin = join(require.resolve(`${pkg}/package.json`), "..", `reedo${ext}`);
+} catch {
+  console.error(
+    `reedo: could not find package ${pkg}. Make sure optional dependencies are installed.`
+  );
+  process.exit(1);
+}
+
+const result = require("child_process").spawnSync(bin, process.argv.slice(2), {
+  stdio: "inherit",
+  env: process.env,
+});
+
+process.exit(result.status ?? 1);

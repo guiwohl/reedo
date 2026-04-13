@@ -25,6 +25,35 @@ pub struct TreeEntry {
     pub depth: usize,
     pub color: Color,
     pub git_status: Option<char>,
+    pub is_last_sibling: bool,
+    pub file_size: Option<u64>,
+}
+
+pub fn format_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{}B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1}K", bytes as f64 / 1024.0)
+    } else if bytes < 1024 * 1024 * 1024 {
+        format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+fn dir_size(path: &Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                total += std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+            } else if p.is_dir() {
+                total += dir_size(&p);
+            }
+        }
+    }
+    total
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +78,8 @@ pub struct TreeState {
     pub fs_undo_stack: Vec<FsOperation>,
     pub fs_redo_stack: Vec<FsOperation>,
     folder_color_idx: usize,
+    pub hint_scope: Option<PathBuf>,
+    pub hint_indices: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +103,12 @@ pub enum FsOperation {
     },
 }
 
+#[derive(Debug, Clone)]
+pub enum HintResult {
+    EnteredFolder,
+    OpenFile(PathBuf),
+}
+
 impl Default for TreeAction {
     fn default() -> Self {
         TreeAction::None
@@ -82,6 +119,90 @@ impl TreeState {
     fn push_fs_op(&mut self, op: FsOperation) {
         self.fs_undo_stack.push(op);
         self.fs_redo_stack.clear();
+    }
+
+    pub fn compute_hints(&mut self) {
+        self.hint_indices.clear();
+        let scope = self.hint_scope.clone().or_else(|| self.root.clone());
+        let scope = match scope {
+            Some(s) => s,
+            None => return,
+        };
+
+        for (i, entry) in self.entries.iter().enumerate() {
+            if i == 0 && entry.path == scope {
+                continue;
+            }
+            if entry.path.parent() == Some(&scope) {
+                self.hint_indices.push(i);
+                if self.hint_indices.len() >= 9 {
+                    break;
+                }
+            }
+        }
+    }
+
+    pub fn init_hint_scope(&mut self) {
+        self.hint_scope = self.root.clone();
+        self.compute_hints();
+    }
+
+    pub fn hint_enter(&mut self, n: usize) -> Option<HintResult> {
+        let &entry_idx = self.hint_indices.get(n)?;
+        let entry = self.entries.get(entry_idx)?;
+        let path = entry.path.clone();
+        let is_dir = entry.is_dir;
+
+        if is_dir {
+            if !self.open_dirs.contains(&path) {
+                self.open_dirs.insert(path.clone());
+                if let Some(root) = self.root.clone() {
+                    self.build(&root);
+                }
+            }
+            // re-find the folder index after rebuild
+            for (i, e) in self.entries.iter().enumerate() {
+                if e.path == path {
+                    self.selected = i;
+                    break;
+                }
+            }
+            self.hint_scope = Some(path);
+            self.compute_hints();
+            Some(HintResult::EnteredFolder)
+        } else {
+            self.selected = entry_idx;
+            Some(HintResult::OpenFile(path))
+        }
+    }
+
+    pub fn hint_back(&mut self) {
+        let scope = match &self.hint_scope {
+            Some(s) => s.clone(),
+            None => return,
+        };
+        let root = match &self.root {
+            Some(r) => r.clone(),
+            None => return,
+        };
+        if scope == root {
+            return;
+        }
+        if let Some(parent) = scope.parent() {
+            self.hint_scope = Some(parent.to_path_buf());
+            // select the folder we just came from
+            for (i, entry) in self.entries.iter().enumerate() {
+                if entry.path == scope {
+                    self.selected = i;
+                    break;
+                }
+            }
+            self.compute_hints();
+        }
+    }
+
+    pub fn hint_index_for_entry(&self, entry_idx: usize) -> Option<usize> {
+        self.hint_indices.iter().position(|&i| i == entry_idx)
     }
 
     pub fn build(&mut self, root: &Path) {
@@ -102,9 +223,33 @@ impl TreeState {
             depth: 0,
             color: Color::Rgb(137, 180, 250),
             git_status: None,
+            is_last_sibling: false,
+            file_size: None,
         });
 
         self.build_dir(root, root, 0);
+        self.compute_hints();
+    }
+
+    pub fn reveal_path(&mut self, target: &Path) {
+        let root = match &self.root {
+            Some(r) => r.clone(),
+            None => return,
+        };
+        if let Ok(rel) = target.strip_prefix(&root) {
+            let mut current = root.clone();
+            for component in rel.parent().into_iter().flat_map(|p| p.components()) {
+                current = current.join(component);
+                self.open_dirs.insert(current.clone());
+            }
+            self.build(&root);
+            for (i, entry) in self.entries.iter().enumerate() {
+                if entry.path == target {
+                    self.selected = i;
+                    break;
+                }
+            }
+        }
     }
 
     pub fn apply_git_statuses(&mut self, git_info: &crate::git::status::GitInfo) {
@@ -112,9 +257,46 @@ impl TreeState {
             Some(r) => r.clone(),
             None => return,
         };
+
+        // apply file statuses
         for entry in &mut self.entries {
-            if let Ok(rel) = entry.path.strip_prefix(&root) {
-                entry.git_status = git_info.status_for_file(rel);
+            if !entry.is_dir {
+                if let Ok(rel) = entry.path.strip_prefix(&root) {
+                    entry.git_status = git_info.status_for_file(rel);
+                }
+            }
+        }
+
+        // propagate to folders: a folder gets the "highest priority" status
+        // of any file beneath it (M > A > ? > D)
+        let mut folder_statuses: std::collections::HashMap<PathBuf, char> =
+            std::collections::HashMap::new();
+
+        for (rel_path, &status) in &git_info.file_statuses {
+            let mut current = root.clone();
+            for component in rel_path.components() {
+                current = current.join(component);
+                if current != root.join(rel_path) {
+                    let existing = folder_statuses.get(&current).copied();
+                    let priority = |c: char| -> u8 {
+                        match c {
+                            'M' => 4,
+                            'A' => 3,
+                            '?' => 2,
+                            'D' => 1,
+                            _ => 0,
+                        }
+                    };
+                    if existing.map_or(true, |e| priority(status) > priority(e)) {
+                        folder_statuses.insert(current.clone(), status);
+                    }
+                }
+            }
+        }
+
+        for entry in &mut self.entries {
+            if entry.is_dir && entry.git_status.is_none() {
+                entry.git_status = folder_statuses.get(&entry.path).copied();
             }
         }
     }
@@ -151,20 +333,28 @@ impl TreeState {
         });
 
         let dir_color = FOLDER_PALETTE[self.folder_color_idx % FOLDER_PALETTE.len()];
+        let child_count = children.len();
 
-        for child in children {
+        for (ci, child) in children.iter().enumerate() {
             let name = child
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
             let is_dir = child.is_dir();
+            let is_last = ci == child_count - 1;
 
             let color = if is_dir {
                 self.folder_color_idx += 1;
                 FOLDER_PALETTE[self.folder_color_idx % FOLDER_PALETTE.len()]
             } else {
                 dir_color
+            };
+
+            let file_size = if is_dir {
+                Some(dir_size(&child))
+            } else {
+                None
             };
 
             self.entries.push(TreeEntry {
@@ -174,10 +364,12 @@ impl TreeState {
                 depth,
                 color,
                 git_status: None,
+                is_last_sibling: is_last,
+                file_size,
             });
 
-            if is_dir && self.open_dirs.contains(&child) {
-                self.build_dir(root, &child, depth + 1);
+            if is_dir && self.open_dirs.contains(child) {
+                self.build_dir(root, child, depth + 1);
             }
         }
     }
@@ -506,6 +698,49 @@ impl TreeState {
     }
 }
 
+pub fn tree_guide_prefix(entries: &[TreeEntry], idx: usize) -> String {
+    let entry = &entries[idx];
+    if entry.depth == 0 {
+        return String::new();
+    }
+
+    let mut prefix = String::new();
+
+    // for each ancestor depth level, check if that ancestor's last sibling
+    // has already passed — if not, draw a continuation │
+    for d in 0..entry.depth.saturating_sub(1) {
+        let target_depth = d;
+        // look backwards from idx to find the ancestor at this depth
+        let mut ancestor_is_last = false;
+        for j in (1..idx).rev() {
+            if entries[j].depth == target_depth {
+                ancestor_is_last = entries[j].is_last_sibling;
+                break;
+            }
+            if entries[j].depth < target_depth {
+                break;
+            }
+        }
+        if ancestor_is_last {
+            prefix.push_str("  ");
+        } else {
+            prefix.push_str("│ ");
+        }
+    }
+
+    if entry.is_last_sibling {
+        prefix.push_str("└ ");
+    } else {
+        prefix.push_str("├ ");
+    }
+
+    prefix
+}
+
+pub fn file_icon_pub(name: &str, is_dir: bool, is_open: bool) -> &'static str {
+    file_icon(name, is_dir, is_open)
+}
+
 fn file_icon(name: &str, is_dir: bool, is_open: bool) -> &'static str {
     if is_dir {
         return if is_open {
@@ -555,6 +790,8 @@ mod tests {
                 depth: 0,
                 color: Color::Reset,
                 git_status: None,
+                is_last_sibling: false,
+                file_size: None,
             }],
             ..TreeState::default()
         };
@@ -578,6 +815,8 @@ mod tests {
                     depth: 0,
                     color: Color::Reset,
                     git_status: None,
+                    is_last_sibling: false,
+                    file_size: None,
                 },
                 TreeEntry {
                     path: child.clone(),
@@ -586,6 +825,8 @@ mod tests {
                     depth: 1,
                     color: Color::Reset,
                     git_status: None,
+                    is_last_sibling: false,
+                    file_size: None,
                 },
             ],
             selected: 1,
@@ -617,11 +858,11 @@ pub fn tree_inner_area(area: Rect) -> Rect {
     )
 }
 
-pub fn tree_list_height(area: Rect, has_action: bool) -> usize {
+pub fn tree_list_height(area: Rect) -> usize {
     let inner_height = tree_inner_area(area).height as usize;
     inner_height
         .saturating_sub(1) // title row
-        .saturating_sub(usize::from(has_action)) // optional action row
+        .saturating_sub(1) // hint bar / action row
 }
 
 impl<'a> Widget for FileTreeWidget<'a> {
@@ -753,7 +994,12 @@ impl<'a> Widget for FileTreeWidget<'a> {
 
         // entries (skip index 0 = root, it's rendered as the title)
         let entries_start = 1usize;
-        for i in 0..tree_list_height(area, self.state.action != TreeAction::None) {
+        let guide_dim = Color::Rgb(
+            match dim { Color::Rgb(r, _, _) => r.saturating_sub(10), _ => 50 },
+            match dim { Color::Rgb(_, g, _) => g.saturating_sub(10), _ => 50 },
+            match dim { Color::Rgb(_, _, b) => b.saturating_sub(10), _ => 60 },
+        );
+        for i in 0..tree_list_height(area) {
             let entry_idx = self.state.scroll_offset + i + 1; // +1 to skip root
             let y = inner.y + (entries_start + i) as u16;
             if y >= inner.y + inner.height {
@@ -771,7 +1017,7 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     });
                 }
 
-                let indent = "  ".repeat(entry.depth);
+                let guide = tree_guide_prefix(&self.state.entries, entry_idx);
                 let is_open = entry.is_dir && self.state.open_dirs.contains(&entry.path);
                 let icon = file_icon(&entry.name, entry.is_dir, is_open);
                 let git_str = entry
@@ -787,11 +1033,11 @@ impl<'a> Widget for FileTreeWidget<'a> {
 
                 let display = format!(
                     " {}{}{}{}{}",
-                    indent, icon, entry.name, git_str, move_indicator
+                    guide, icon, entry.name, git_str, move_indicator
                 );
 
-                // icon starts after " " + indent
-                let icon_start = 1 + indent.len();
+                let guide_end = 1 + guide.chars().count();
+                let icon_start = guide_end;
                 let icon_end = icon_start + icon.chars().count();
                 let name_start = icon_end;
                 let name_end = name_start + entry.name.len();
@@ -801,8 +1047,9 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     if cx >= inner.x + inner.width {
                         break;
                     }
-                    let style = if ci >= icon_start && ci < icon_end {
-                        // icon same color as name
+                    let style = if ci > 0 && ci < guide_end {
+                        Style::default().fg(guide_dim).bg(line_bg)
+                    } else if ci >= icon_start && ci < icon_end {
                         let mut s = Style::default().fg(entry.color).bg(line_bg);
                         if entry.is_dir {
                             s = s.add_modifier(Modifier::BOLD);
@@ -826,6 +1073,165 @@ impl<'a> Widget for FileTreeWidget<'a> {
                         cell.set_style(style);
                     });
                     cx += 1;
+                }
+
+                // right-aligned: hint key or file size
+                let hint_key = self
+                    .state
+                    .hint_index_for_entry(entry_idx)
+                    .map(|n| format!("{}", n + 1));
+                let is_scope_parent = {
+                    let scope = self.state.hint_scope.as_ref().or(self.state.root.as_ref());
+                    let is_root = self.state.root.as_ref().map(|r| *r == entry.path).unwrap_or(false);
+                    scope.map_or(false, |s| entry.path == *s) && !is_root
+                };
+
+                let right_label: Option<(&str, Color)> = if let Some(ref k) = hint_key {
+                    Some((k.as_str(), dim))
+                } else if is_scope_parent {
+                    Some(("⌫", dim))
+                } else if let Some(size) = entry.file_size {
+                    let size_str = format_size(size);
+                    let size_x = inner.x + inner.width - size_str.len() as u16 - 1;
+                    if size_x > cx {
+                        let mut sx = size_x;
+                        for ch in size_str.chars() {
+                            if sx >= inner.x + inner.width {
+                                break;
+                            }
+                            buf.cell_mut((sx, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(Style::default().fg(dim).bg(line_bg));
+                            });
+                            sx += 1;
+                        }
+                    }
+                    None
+                } else {
+                    None
+                };
+
+                if let Some((label, color)) = right_label {
+                    let label_x = inner.x + inner.width - label.chars().count() as u16 - 1;
+                    if label_x > cx {
+                        let mut sx = label_x;
+                        for ch in label.chars() {
+                            if sx >= inner.x + inner.width {
+                                break;
+                            }
+                            buf.cell_mut((sx, y)).map(|cell| {
+                                cell.set_char(ch);
+                                cell.set_style(Style::default().fg(color).bg(line_bg));
+                            });
+                            sx += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        // hint bar at bottom
+        if self.state.action == TreeAction::None {
+            let hint_y = inner.y + inner.height - 1;
+
+            // fill bg
+            for lx in inner.x..inner.x + inner.width {
+                buf.cell_mut((lx, hint_y)).map(|cell| {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(bg));
+                });
+            }
+
+            let is_at_root = self.state.hint_scope.as_ref() == self.state.root.as_ref()
+                || self.state.hint_scope.is_none();
+
+            let mut hints: Vec<(&str, &str)> = Vec::new();
+            if !self.state.hint_indices.is_empty() {
+                let max_n = self.state.hint_indices.len();
+                if max_n == 1 {
+                    hints.push(("1", "jump"));
+                } else {
+                    // we'll handle this with a custom label below
+                    hints.push(("", "")); // placeholder
+                }
+            }
+            if !is_at_root {
+                hints.push(("⌫", "back"));
+            }
+            hints.push(("n", "new"));
+            hints.push(("r", "rename"));
+            hints.push(("d", "del"));
+            hints.push(("z", "collapse"));
+
+            // build the hint string manually for the range label
+            let key_fg = self.theme.fg();
+            let desc_fg = dim;
+            let mut cx = inner.x + 1;
+
+            for (i, (key, desc)) in hints.iter().enumerate() {
+                if cx >= inner.x + inner.width - 1 {
+                    break;
+                }
+
+                // special case: range label for jump
+                let key_str = if i == 0 && !self.state.hint_indices.is_empty() {
+                    let max_n = self.state.hint_indices.len();
+                    if max_n == 1 {
+                        "1".to_string()
+                    } else {
+                        format!("1-{}", max_n)
+                    }
+                } else {
+                    key.to_string()
+                };
+
+                let desc_str = if i == 0 && !self.state.hint_indices.is_empty() {
+                    "jump"
+                } else {
+                    desc
+                };
+
+                if key_str.is_empty() && desc_str.is_empty() {
+                    continue;
+                }
+
+                // key part
+                for ch in key_str.chars() {
+                    if cx >= inner.x + inner.width - 1 {
+                        break;
+                    }
+                    buf.cell_mut((cx, hint_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(key_fg).bg(bg));
+                    });
+                    cx += 1;
+                }
+
+                // space
+                if cx < inner.x + inner.width - 1 {
+                    cx += 1;
+                }
+
+                // desc part
+                for ch in desc_str.chars() {
+                    if cx >= inner.x + inner.width - 1 {
+                        break;
+                    }
+                    buf.cell_mut((cx, hint_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(Style::default().fg(desc_fg).bg(bg));
+                    });
+                    cx += 1;
+                }
+
+                // separator
+                if cx + 2 < inner.x + inner.width - 1 {
+                    cx += 1;
+                    buf.cell_mut((cx, hint_y)).map(|cell| {
+                        cell.set_char('│');
+                        cell.set_style(Style::default().fg(guide_dim).bg(bg));
+                    });
+                    cx += 2;
                 }
             }
         }

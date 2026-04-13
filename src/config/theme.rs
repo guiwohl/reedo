@@ -14,6 +14,8 @@ pub struct ThemeColors {
     pub cursor_fg: String,
     #[serde(default = "default_selection")]
     pub selection: String,
+    #[serde(default = "default_cursorline")]
+    pub cursorline: String,
     #[serde(default = "default_statusbar_bg")]
     pub statusbar_bg: String,
     #[serde(default = "default_statusbar_fg")]
@@ -53,6 +55,9 @@ fn default_cursor_fg() -> String {
 }
 fn default_selection() -> String {
     "#283457".into()
+}
+fn default_cursorline() -> String {
+    "#1e2030".into()
 }
 fn default_statusbar_bg() -> String {
     "#1e1e2e".into()
@@ -94,6 +99,7 @@ impl Default for ThemeColors {
             cursor_bg: default_cursor_bg(),
             cursor_fg: default_cursor_fg(),
             selection: default_selection(),
+            cursorline: default_cursorline(),
             statusbar_bg: default_statusbar_bg(),
             statusbar_fg: default_statusbar_fg(),
             keyword: default_keyword(),
@@ -142,6 +148,9 @@ impl Theme {
     pub fn selection(&self) -> ratatui::style::Color {
         parse_theme_color(&self.colors.selection)
     }
+    pub fn cursorline(&self) -> ratatui::style::Color {
+        parse_theme_color(&self.colors.cursorline)
+    }
     pub fn statusbar_bg(&self) -> ratatui::style::Color {
         parse_theme_color(&self.colors.statusbar_bg)
     }
@@ -156,7 +165,6 @@ impl Theme {
     }
 
     pub fn popup_bg(&self) -> ratatui::style::Color {
-        // slightly lighter/darker than main bg for contrast
         let c = parse_theme_color(&self.colors.bg);
         match c {
             ratatui::style::Color::Rgb(r, g, b) => ratatui::style::Color::Rgb(
@@ -233,6 +241,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#f9e2af".into(),
                 cursor_fg: "#1e1e2e".into(),
                 selection: "bright-black".into(),
+                cursorline: "default".into(),
                 statusbar_bg: "default".into(),
                 statusbar_fg: "default".into(),
                 keyword: "#bb9af7".into(),
@@ -255,6 +264,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#383a42".into(),
                 cursor_fg: "#fafafa".into(),
                 selection: "#bfceff".into(),
+                cursorline: "#f0f0f0".into(),
                 statusbar_bg: "#e5e5e5".into(),
                 statusbar_fg: "#383a42".into(),
                 keyword: "#a626a4".into(),
@@ -276,6 +286,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#f5e0dc".into(),
                 cursor_fg: "#1e1e2e".into(),
                 selection: "#45475a".into(),
+                cursorline: "#232336".into(),
                 statusbar_bg: "#181825".into(),
                 statusbar_fg: "#a6adc8".into(),
                 keyword: "#cba6f7".into(),
@@ -297,6 +308,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#f8f8f2".into(),
                 cursor_fg: "#282a36".into(),
                 selection: "#44475a".into(),
+                cursorline: "#2d2f3d".into(),
                 statusbar_bg: "#21222c".into(),
                 statusbar_fg: "#f8f8f2".into(),
                 keyword: "#ff79c6".into(),
@@ -318,6 +330,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#ebdbb2".into(),
                 cursor_fg: "#282828".into(),
                 selection: "#3c3836".into(),
+                cursorline: "#2d2d2d".into(),
                 statusbar_bg: "#1d2021".into(),
                 statusbar_fg: "#ebdbb2".into(),
                 keyword: "#fb4934".into(),
@@ -339,6 +352,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#d8dee9".into(),
                 cursor_fg: "#2e3440".into(),
                 selection: "#434c5e".into(),
+                cursorline: "#333a47".into(),
                 statusbar_bg: "#3b4252".into(),
                 statusbar_fg: "#d8dee9".into(),
                 keyword: "#81a1c1".into(),
@@ -360,6 +374,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#e0def4".into(),
                 cursor_fg: "#191724".into(),
                 selection: "#2a2837".into(),
+                cursorline: "#1e1c2b".into(),
                 statusbar_bg: "#1f1d2e".into(),
                 statusbar_fg: "#e0def4".into(),
                 keyword: "#31748f".into(),
@@ -381,6 +396,7 @@ pub fn bundled_themes() -> Vec<Theme> {
                 cursor_bg: "#839496".into(),
                 cursor_fg: "#002b36".into(),
                 selection: "#073642".into(),
+                cursorline: "#07323d".into(),
                 statusbar_bg: "#073642".into(),
                 statusbar_fg: "#93a1a1".into(),
                 keyword: "#859900".into(),
@@ -397,7 +413,6 @@ pub fn bundled_themes() -> Vec<Theme> {
 }
 
 pub fn load_theme(name: &str) -> Theme {
-    // check for custom theme file
     let theme_dir = dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("~/.config"))
         .join("reedo")
@@ -413,7 +428,6 @@ pub fn load_theme(name: &str) -> Theme {
         }
     }
 
-    // fall back to bundled
     bundled_themes()
         .into_iter()
         .find(|t| t.name == name)

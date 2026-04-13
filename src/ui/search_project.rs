@@ -21,6 +21,7 @@ pub struct ProjectSearchState {
     pub selected: usize,
     pub scroll_offset: usize,
     pub searching: bool,
+    pub regex_mode: bool,
 }
 
 impl ProjectSearchState {
@@ -45,6 +46,10 @@ impl ProjectSearchState {
         }
     }
 
+    pub fn toggle_regex(&mut self) {
+        self.regex_mode = !self.regex_mode;
+    }
+
     pub fn search(&mut self, root: &Path) {
         self.results.clear();
         self.selected = 0;
@@ -52,6 +57,12 @@ impl ProjectSearchState {
         if self.query.is_empty() {
             return;
         }
+
+        let re = if self.regex_mode {
+            regex::Regex::new(&self.query).ok()
+        } else {
+            None
+        };
 
         let walker = ignore::WalkBuilder::new(root)
             .hidden(true)
@@ -64,23 +75,32 @@ impl ProjectSearchState {
             }
             let path = entry.path();
 
-            // skip binary files
             if is_binary(path) {
                 continue;
             }
 
             if let Ok(content) = std::fs::read_to_string(path) {
                 for (line_idx, line) in content.lines().enumerate() {
-                    let mut start = 0;
-                    while let Some(pos) = line[start..].find(&self.query) {
+                    let matches: Vec<usize> = if let Some(ref re) = re {
+                        re.find_iter(line).map(|m| m.start()).collect()
+                    } else {
+                        let mut found = Vec::new();
+                        let mut start = 0;
+                        while let Some(pos) = line[start..].find(&self.query) {
+                            found.push(start + pos);
+                            start += pos + 1;
+                        }
+                        found
+                    };
+
+                    for col in matches {
                         let rel_path = path.strip_prefix(root).unwrap_or(path);
                         self.results.push(SearchResult {
                             path: rel_path.to_path_buf(),
                             line: line_idx,
-                            col: start + pos,
+                            col,
                             text: line.to_string(),
                         });
-                        start += pos + 1;
                         if self.results.len() > 1000 {
                             return;
                         }

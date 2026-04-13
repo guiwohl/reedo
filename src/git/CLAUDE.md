@@ -14,6 +14,12 @@ Git integration via CLI commands.
 - `GitInfo::diff_for_file(root, path)` — runs `git diff --unified=0` and parses hunk headers to determine added/modified/deleted lines
 - `GitInfo::status_line()` — formats `main ~3 +1 ↑2 ↓0` for the statusbar
 
+## Gutter Marks
+
+- ▎ for added/modified lines
+- ▁ for deleted lines
+- Minimap scrollbar also renders git marks on the right edge
+
 ## Refresh
 
 Called every 5 seconds from `app.check_git_refresh()` in the event loop. Updates statusbar info, file tree indicators, and gutter marks. Runs on a timer independent of the external file change detection (which checks every ~1s in `app.check_external_changes()`).
