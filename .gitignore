@@ -1,3 +1,10 @@
 /target
 .env
 .codex
+
+# npm platform binaries (built by CI)
+npm/linux-x64-gnu/reedo
+npm/linux-arm64-gnu/reedo
+npm/darwin-x64/reedo
+npm/darwin-arm64/reedo
+npm/win32-x64/reedo.exe

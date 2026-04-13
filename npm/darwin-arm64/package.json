@@ -1,0 +1,13 @@
+{
+  "name": "@reedo/darwin-arm64",
+  "version": "0.1.0",
+  "description": "reedo binary for macOS arm64 (Apple Silicon)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guiwohl/kilo"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["reedo"]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@reedo/darwin-x64",
+  "version": "0.1.0",
+  "description": "reedo binary for macOS x64 (Intel)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guiwohl/kilo"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["reedo"]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@reedo/linux-x64-gnu",
+  "version": "0.1.0",
+  "description": "reedo binary for linux x64 (glibc)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guiwohl/kilo"
+  },
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["reedo"]
+}
