@@ -981,6 +981,7 @@ dependencies = [
  "dirs",
  "ignore",
  "ratatui",
+ "regex",
  "ropey",
  "serde",
  "serde_json",

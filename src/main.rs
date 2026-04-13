@@ -137,6 +137,22 @@ fn run_tui(cli: Cli, settings: Settings) -> io::Result<()> {
         } else {
             app.buffer.file_path = Some(path.to_path_buf());
         }
+    } else if let Some((path, line, col)) = Settings::load_session() {
+        if app.open_file(&path).is_ok() {
+            let max_line = app.buffer.line_count().saturating_sub(1);
+            let safe_line = line.min(max_line);
+            let safe_col = col.min(app.buffer.line_len(safe_line));
+            app.cursor.move_to(safe_line, safe_col, false);
+            app.cursor.update_desired_col();
+            if let Some(parent) = path.parent() {
+                let root = if parent.to_string_lossy().is_empty() {
+                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+                } else {
+                    parent.to_path_buf()
+                };
+                app.set_project_root(root);
+            }
+        }
     }
 
     if app.project_root.is_none() {
@@ -989,6 +1005,7 @@ impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
 fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
     let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
     let shift = key.modifiers.contains(KeyModifiers::SHIFT);
+    let alt = key.modifiers.contains(KeyModifiers::ALT);
 
     // side panel tree: Esc unfocuses (doesn't close panel)
     if app.side_panel_open && key.code == KeyCode::Esc && app.popup == Popup::FileTree {
@@ -1016,6 +1033,23 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                     app.cursor.update_desired_col();
                 }
             }
+            KeyCode::Up => {
+                app.search_state.history_prev();
+                app.search_state.find_matches(&app.buffer);
+            }
+            KeyCode::Down => {
+                app.search_state.history_next();
+                app.search_state.find_matches(&app.buffer);
+            }
+            KeyCode::Char('r') if alt => {
+                app.search_state.toggle_regex();
+                app.search_state.find_matches(&app.buffer);
+                if app.search_state.regex_mode {
+                    app.flash("regex on");
+                } else {
+                    app.flash("regex off");
+                }
+            }
             KeyCode::Backspace => {
                 app.search_state.delete_char();
                 app.search_state.find_matches(&app.buffer);
@@ -1023,10 +1057,6 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
             KeyCode::Char(ch) if !ctrl => {
                 app.search_state.insert_char(ch);
                 app.search_state.find_matches(&app.buffer);
-                let count = app.search_state.matches.len();
-                if count > 0 {
-                    app.flash(format!("{} matches", count));
-                }
                 if let Some((line, col)) = app.search_state.current_pos() {
                     app.cursor.move_to(line, col, false);
                     app.cursor.update_desired_col();
@@ -1069,6 +1099,7 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                         }
                     }
                     KeyCode::Char('a') => {
+                        let mut count = 0usize;
                         while app.replace_state.awaiting_confirm {
                             if let Some((line, col)) = app.replace_state.current_pos() {
                                 let end_col = col + app.replace_state.search_query.len();
@@ -1079,11 +1110,13 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                                 app.buffer
                                     .insert_text(start, &app.replace_state.replace_query);
                                 app.buffer.undo_stack.finish_group();
+                                count += 1;
                             }
                             app.replace_state.skip_current();
                             app.replace_state.find_matches(&app.buffer);
                         }
                         app.mark_edited();
+                        app.flash(format!("replaced {} occurrences", count));
                         app.popup = Popup::None;
                     }
                     _ => {}
@@ -1415,6 +1448,14 @@ fn handle_popup_input(app: &mut App, key: crossterm::event::KeyEvent) {
                             app.project_search_state.reset();
                             app.popup = Popup::None;
                         }
+                    }
+                }
+                KeyCode::Char('r') if alt => {
+                    app.project_search_state.toggle_regex();
+                    if app.project_search_state.regex_mode {
+                        app.flash("regex on");
+                    } else {
+                        app.flash("regex off");
                     }
                 }
                 KeyCode::Backspace => app.project_search_state.delete_char(),

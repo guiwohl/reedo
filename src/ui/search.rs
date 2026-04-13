@@ -9,26 +9,74 @@ pub struct SearchState {
     pub cursor_pos: usize,
     pub matches: Vec<(usize, usize)>, // (line, col) of each match
     pub current_match: usize,
+    pub regex_mode: bool,
+    pub history: Vec<String>,
+    pub history_idx: Option<usize>,
 }
 
 impl SearchState {
     pub fn reset(&mut self) {
+        if !self.query.is_empty() {
+            if self.history.last().map(|s| s.as_str()) != Some(&self.query) {
+                self.history.push(self.query.clone());
+                if self.history.len() > 50 {
+                    self.history.remove(0);
+                }
+            }
+        }
         self.query.clear();
         self.cursor_pos = 0;
         self.matches.clear();
         self.current_match = 0;
+        self.history_idx = None;
     }
 
     pub fn insert_char(&mut self, ch: char) {
         self.query.insert(self.cursor_pos, ch);
         self.cursor_pos += 1;
+        self.history_idx = None;
     }
 
     pub fn delete_char(&mut self) {
         if self.cursor_pos > 0 {
             self.cursor_pos -= 1;
             self.query.remove(self.cursor_pos);
+            self.history_idx = None;
         }
+    }
+
+    pub fn history_prev(&mut self) {
+        if self.history.is_empty() {
+            return;
+        }
+        let idx = match self.history_idx {
+            Some(0) => return,
+            Some(i) => i - 1,
+            None => self.history.len() - 1,
+        };
+        self.history_idx = Some(idx);
+        self.query = self.history[idx].clone();
+        self.cursor_pos = self.query.len();
+    }
+
+    pub fn history_next(&mut self) {
+        let idx = match self.history_idx {
+            Some(i) => i + 1,
+            None => return,
+        };
+        if idx >= self.history.len() {
+            self.history_idx = None;
+            self.query.clear();
+            self.cursor_pos = 0;
+        } else {
+            self.history_idx = Some(idx);
+            self.query = self.history[idx].clone();
+            self.cursor_pos = self.query.len();
+        }
+    }
+
+    pub fn toggle_regex(&mut self) {
+        self.regex_mode = !self.regex_mode;
     }
 
     pub fn find_matches(&mut self, buffer: &crate::editor::buffer::Buffer) {
@@ -36,12 +84,25 @@ impl SearchState {
         if self.query.is_empty() {
             return;
         }
+
+        let re = if self.regex_mode {
+            regex::Regex::new(&self.query).ok()
+        } else {
+            None
+        };
+
         for line_idx in 0..buffer.line_count() {
             let line_text = buffer.line_text(line_idx);
-            let mut start = 0;
-            while let Some(pos) = line_text[start..].find(&self.query) {
-                self.matches.push((line_idx, start + pos));
-                start += pos + 1;
+            if let Some(ref re) = re {
+                for m in re.find_iter(&line_text) {
+                    self.matches.push((line_idx, m.start()));
+                }
+            } else {
+                let mut start = 0;
+                while let Some(pos) = line_text[start..].find(&self.query) {
+                    self.matches.push((line_idx, start + pos));
+                    start += pos + 1;
+                }
             }
         }
         if !self.matches.is_empty() && self.current_match >= self.matches.len() {
@@ -89,7 +150,7 @@ impl<'a> Widget for SearchBar<'a> {
             });
         }
 
-        let label = " / ";
+        let label = if self.state.regex_mode { " /re " } else { " / " };
         let match_info = if self.state.matches.is_empty() {
             if self.state.query.is_empty() {
                 String::new()

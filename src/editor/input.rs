@@ -60,10 +60,15 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('s') if ctrl => {
             if let Err(e) = app.buffer.save() {
                 tracing::error!("save failed: {}", e);
-                app.flash("save failed");
+                app.flash(format!("save failed: {}", e));
             } else {
                 if let Some(ref p) = app.buffer.file_path {
                     app.last_file_mtime = std::fs::metadata(p).ok().and_then(|m| m.modified().ok());
+                    crate::config::settings::Settings::save_session(
+                        p,
+                        app.cursor.pos.line,
+                        app.cursor.pos.col,
+                    );
                 }
                 app.flash("saved");
             }
@@ -97,8 +102,9 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('v') if ctrl => {
             if let Some(text) = clipboard::paste_from_clipboard() {
                 delete_selection_if_any(app);
+                let adjusted = smart_indent_paste(&text, app);
                 app.buffer.undo_stack.begin_group(app.cursor.pos);
-                let new_pos = app.buffer.insert_text(app.cursor.pos, &text);
+                let new_pos = app.buffer.insert_text(app.cursor.pos, &adjusted);
                 app.buffer.undo_stack.finish_group();
                 app.cursor.move_to(new_pos.line, new_pos.col, false);
                 app.cursor.update_desired_col();
@@ -124,6 +130,18 @@ pub fn handle_key(app: &mut App, key: KeyEvent) {
         KeyCode::Char('l') if ctrl => {
             app.popup = crate::app::Popup::GotoLine;
             app.goto_line_input.clear();
+        }
+
+        // Ctrl+]: jump to matching bracket
+        KeyCode::Char(']') if ctrl => {
+            if let Some((line, col)) = brackets::find_matching_bracket(
+                &app.buffer,
+                app.cursor.pos.line,
+                app.cursor.pos.col,
+            ) {
+                app.cursor.move_to(line, col, false);
+                app.cursor.update_desired_col();
+            }
         }
 
         // Ctrl+/: toggle line comment
@@ -852,6 +870,50 @@ fn toggle_line_comment(app: &mut App) {
 
     app.buffer.undo_stack.finish_group();
     app.mark_edited();
+}
+
+fn smart_indent_paste(text: &str, app: &App) -> String {
+    let lines: Vec<&str> = text.split('\n').collect();
+    if lines.len() <= 1 {
+        return text.to_string();
+    }
+
+    // detect the indent of the first non-empty pasted line
+    let paste_indent = lines
+        .iter()
+        .find(|l| !l.trim().is_empty())
+        .map(|l| l.len() - l.trim_start().len())
+        .unwrap_or(0);
+
+    // target indent = current line's indent
+    let current_line = app.buffer.line_text(app.cursor.pos.line);
+    let target_indent = current_line.len() - current_line.trim_start().len();
+
+    if paste_indent == target_indent {
+        return text.to_string();
+    }
+
+    let diff = target_indent as i64 - paste_indent as i64;
+    let indent_str = " ".repeat(diff.unsigned_abs() as usize);
+
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            if i == 0 {
+                // first line pastes at cursor — don't adjust it
+                line.to_string()
+            } else if line.trim().is_empty() {
+                String::new()
+            } else if diff > 0 {
+                format!("{}{}", indent_str, line)
+            } else {
+                let strip = (diff.unsigned_abs() as usize).min(line.len() - line.trim_start().len());
+                line[strip..].to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn toggle_markdown_checkbox(app: &mut App) {

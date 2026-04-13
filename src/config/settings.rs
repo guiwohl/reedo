@@ -170,6 +170,89 @@ impl Settings {
         }
     }
 
+    pub fn session_path() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("~/.config"))
+            .join("reedo");
+        config_dir.join("session.json")
+    }
+
+    pub fn save_session(file_path: &std::path::Path, line: usize, col: usize) {
+        let path = Self::session_path();
+        let data = serde_json::json!({
+            "file": file_path.to_string_lossy(),
+            "line": line,
+            "col": col,
+        });
+        let _ = std::fs::write(&path, data.to_string());
+    }
+
+    pub fn load_session() -> Option<(PathBuf, usize, usize)> {
+        let path = Self::session_path();
+        let content = std::fs::read_to_string(&path).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&content).ok()?;
+        let file = v.get("file")?.as_str()?;
+        let line = v.get("line")?.as_u64()? as usize;
+        let col = v.get("col")?.as_u64()? as usize;
+        let file_path = PathBuf::from(file);
+        if file_path.exists() {
+            Some((file_path, line, col))
+        } else {
+            None
+        }
+    }
+
+    pub fn apply_editorconfig(&mut self, file_path: &std::path::Path, project_root: &std::path::Path) {
+        let ec_path = project_root.join(".editorconfig");
+        if !ec_path.exists() {
+            return;
+        }
+        let content = match std::fs::read_to_string(&ec_path) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+
+        let file_name = file_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let ext = file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+
+        let mut in_matching_section = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(';') {
+                continue;
+            }
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                let pattern = &trimmed[1..trimmed.len() - 1];
+                in_matching_section = editorconfig_glob_matches(pattern, &file_name, ext);
+                continue;
+            }
+            if !in_matching_section {
+                continue;
+            }
+            if let Some((key, value)) = trimmed.split_once('=') {
+                let key = key.trim().to_lowercase();
+                let value = value.trim();
+                match key.as_str() {
+                    "indent_style" => {
+                        self.use_spaces = value.eq_ignore_ascii_case("space");
+                    }
+                    "indent_size" => {
+                        if let Ok(n) = value.parse::<usize>() {
+                            self.indent_size = n;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn save_default(&self) {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
@@ -180,4 +263,24 @@ impl Settings {
             tracing::info!("created default config at {}", path.display());
         }
     }
+}
+
+fn editorconfig_glob_matches(pattern: &str, filename: &str, ext: &str) -> bool {
+    if pattern == "*" {
+        return true;
+    }
+    // *.ext pattern
+    if let Some(pat_ext) = pattern.strip_prefix("*.") {
+        if pat_ext.contains(',') {
+            // {rs,py,js} style
+            let inner = pat_ext
+                .strip_prefix('{')
+                .and_then(|s| s.strip_suffix('}'))
+                .unwrap_or(pat_ext);
+            return inner.split(',').any(|e| e.trim() == ext);
+        }
+        return pat_ext == ext;
+    }
+    // exact filename match
+    pattern == filename
 }

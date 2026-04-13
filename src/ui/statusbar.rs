@@ -74,7 +74,8 @@ impl<'a> Widget for StatusBar<'a> {
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| "[new]".to_string())
         };
-        let file_part = format!(" {}{}", fname, dirty);
+        let le = self.app.buffer.line_ending.label();
+        let file_part = format!(" {}{} [{}]", fname, dirty, le);
 
         // build left side
         let left = format!("{}{}{}", mode_str, line_info, total_info);

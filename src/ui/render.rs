@@ -91,7 +91,11 @@ impl<'a> Widget for EditorView<'a> {
         let indent_size = self.app.indent_size;
 
         // matching bracket highlight
-        let bracket_match = find_matching_bracket(self.app);
+        let bracket_match = crate::editor::brackets::find_matching_bracket(
+            &self.app.buffer,
+            self.app.cursor.pos.line,
+            self.app.cursor.pos.col,
+        );
         let bracket_highlight_color = Color::Rgb(249, 226, 175);
 
         // persistent search highlights
@@ -604,96 +608,3 @@ fn find_breadcrumb(app: &crate::app::App) -> Option<String> {
     None
 }
 
-fn find_matching_bracket(app: &crate::app::App) -> Option<(usize, usize)> {
-    let line = app.cursor.pos.line;
-    let col = app.cursor.pos.col;
-    let text = app.buffer.line_text(line);
-    let chars: Vec<char> = text.chars().collect();
-
-    let ch = if col < chars.len() {
-        chars[col]
-    } else if col > 0 && col - 1 < chars.len() {
-        // check char before cursor too
-        return find_matching_bracket_at(app, line, col - 1);
-    } else {
-        return None;
-    };
-
-    if matches!(ch, '(' | '[' | '{' | ')' | ']' | '}') {
-        find_matching_bracket_at(app, line, col)
-    } else if col > 0 && col - 1 < chars.len() {
-        let prev = chars[col - 1];
-        if matches!(prev, '(' | '[' | '{' | ')' | ']' | '}') {
-            find_matching_bracket_at(app, line, col - 1)
-        } else {
-            None
-        }
-    } else {
-        None
-    }
-}
-
-fn find_matching_bracket_at(app: &crate::app::App, line: usize, col: usize) -> Option<(usize, usize)> {
-    let text = app.buffer.line_text(line);
-    let chars: Vec<char> = text.chars().collect();
-    if col >= chars.len() {
-        return None;
-    }
-    let ch = chars[col];
-    let (target, forward) = match ch {
-        '(' => (')', true),
-        '[' => (']', true),
-        '{' => ('}', true),
-        ')' => ('(', false),
-        ']' => ('[', false),
-        '}' => ('{', false),
-        _ => return None,
-    };
-
-    let mut depth = 0i32;
-    let line_count = app.buffer.line_count();
-
-    if forward {
-        let mut l = line;
-        let c = col;
-        while l < line_count {
-            let lt = app.buffer.line_text(l);
-            let lc: Vec<char> = lt.chars().collect();
-            let start = if l == line { c } else { 0 };
-            for ci in start..lc.len() {
-                if lc[ci] == ch {
-                    depth += 1;
-                } else if lc[ci] == target {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some((l, ci));
-                    }
-                }
-            }
-            l += 1;
-        }
-    } else {
-        let mut l = line as i64;
-        let mut first = true;
-        while l >= 0 {
-            let lt = app.buffer.line_text(l as usize);
-            let lc: Vec<char> = lt.chars().collect();
-            let end = if first { col } else { lc.len().saturating_sub(1) };
-            first = false;
-            for ci in (0..=end).rev() {
-                if ci < lc.len() {
-                    if lc[ci] == ch {
-                        depth += 1;
-                    } else if lc[ci] == target {
-                        depth -= 1;
-                        if depth == 0 {
-                            return Some((l as usize, ci));
-                        }
-                    }
-                }
-            }
-            l -= 1;
-        }
-    }
-    None
-}

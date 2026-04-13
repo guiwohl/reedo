@@ -158,6 +158,17 @@ impl App {
             self.recent_files.truncate(20);
         }
 
+        // save session for restore
+        crate::config::settings::Settings::save_session(path, 0, 0);
+
+        // apply .editorconfig overrides
+        if let Some(ref root) = self.project_root {
+            let mut tmp = crate::config::settings::Settings::default();
+            tmp.indent_size = self.indent_size;
+            tmp.apply_editorconfig(path, root);
+            self.indent_size = tmp.indent_size;
+        }
+
         // auto-reveal in tree if side panel is open
         if self.side_panel_open {
             self.tree_state.reveal_path(path);
