@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/guiwohl/kilo"
+    "url": "https://github.com/guiwohl/reedo"
   },
   "os": ["linux"],
   "cpu": ["arm64"],
