@@ -15,7 +15,6 @@
   ],
   "optionalDependencies": {
     "@reedo/linux-x64-gnu": "0.1.0",
-    "@reedo/linux-arm64-gnu": "0.1.0",
     "@reedo/darwin-x64": "0.1.0",
     "@reedo/darwin-arm64": "0.1.0",
     "@reedo/win32-x64": "0.1.0"

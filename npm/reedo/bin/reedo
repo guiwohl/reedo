@@ -7,7 +7,6 @@ const PLATFORMS = {
   "darwin-arm64": "@reedo/darwin-arm64",
   "darwin-x64": "@reedo/darwin-x64",
   "linux-x64": "@reedo/linux-x64-gnu",
-  "linux-arm64": "@reedo/linux-arm64-gnu",
   "win32-x64": "@reedo/win32-x64",
 };
 
