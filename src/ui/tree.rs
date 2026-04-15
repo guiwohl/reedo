@@ -26,34 +26,6 @@ pub struct TreeEntry {
     pub color: Color,
     pub git_status: Option<char>,
     pub is_last_sibling: bool,
-    pub file_size: Option<u64>,
-}
-
-pub fn format_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{}B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!("{:.1}K", bytes as f64 / 1024.0)
-    } else if bytes < 1024 * 1024 * 1024 {
-        format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0))
-    } else {
-        format!("{:.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
-    }
-}
-
-fn dir_size(path: &Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_file() {
-                total += std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-            } else if p.is_dir() {
-                total += dir_size(&p);
-            }
-        }
-    }
-    total
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -224,7 +196,6 @@ impl TreeState {
             color: Color::Rgb(137, 180, 250),
             git_status: None,
             is_last_sibling: false,
-            file_size: None,
         });
 
         self.build_dir(root, root, 0);
@@ -351,12 +322,6 @@ impl TreeState {
                 dir_color
             };
 
-            let file_size = if is_dir {
-                Some(dir_size(&child))
-            } else {
-                None
-            };
-
             self.entries.push(TreeEntry {
                 path: child.clone(),
                 name,
@@ -365,7 +330,6 @@ impl TreeState {
                 color,
                 git_status: None,
                 is_last_sibling: is_last,
-                file_size,
             });
 
             if is_dir && self.open_dirs.contains(child) {
@@ -791,7 +755,6 @@ mod tests {
                 color: Color::Reset,
                 git_status: None,
                 is_last_sibling: false,
-                file_size: None,
             }],
             ..TreeState::default()
         };
@@ -816,8 +779,7 @@ mod tests {
                     color: Color::Reset,
                     git_status: None,
                     is_last_sibling: false,
-                    file_size: None,
-                },
+                    },
                 TreeEntry {
                     path: child.clone(),
                     name: "main.rs".to_string(),
@@ -826,8 +788,7 @@ mod tests {
                     color: Color::Reset,
                     git_status: None,
                     is_last_sibling: false,
-                    file_size: None,
-                },
+                    },
             ],
             selected: 1,
             ..TreeState::default()
@@ -1090,23 +1051,6 @@ impl<'a> Widget for FileTreeWidget<'a> {
                     Some((k.as_str(), dim))
                 } else if is_scope_parent {
                     Some(("⌫", dim))
-                } else if let Some(size) = entry.file_size {
-                    let size_str = format_size(size);
-                    let size_x = inner.x + inner.width - size_str.len() as u16 - 1;
-                    if size_x > cx {
-                        let mut sx = size_x;
-                        for ch in size_str.chars() {
-                            if sx >= inner.x + inner.width {
-                                break;
-                            }
-                            buf.cell_mut((sx, y)).map(|cell| {
-                                cell.set_char(ch);
-                                cell.set_style(Style::default().fg(dim).bg(line_bg));
-                            });
-                            sx += 1;
-                        }
-                    }
-                    None
                 } else {
                     None
                 };

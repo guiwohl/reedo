@@ -63,12 +63,8 @@ pub fn all_languages() -> Vec<LangConfig> {
             highlight_query: PHP_HIGHLIGHTS,
             extensions: &["php"],
         },
-        LangConfig {
-            name: "json",
-            language: tree_sitter_json::LANGUAGE.into(),
-            highlight_query: JSON_HIGHLIGHTS,
-            extensions: &["json"],
-        },
+        // json uses custom highlighter in highlight.rs, not tree-sitter
+        // tree-sitter-json triggers C-level assertion crashes on some content
         // markdown uses custom highlighter in highlight.rs, not tree-sitter
         // tree-sitter-md triggers C-level assertion crashes on some content
         LangConfig {
@@ -258,14 +254,7 @@ const PHP_HIGHLIGHTS: &str = r##"
 (variable_name) @property
 "##;
 
-const JSON_HIGHLIGHTS: &str = r##"
-(string) @string
-(number) @number
-(true) @constant
-(false) @constant
-(null) @constant
-(pair key: (string) @property)
-"##;
+// JSON highlights removed — custom highlighter in highlight.rs
 
 const GO_HIGHLIGHTS: &str = r##"
 (comment) @comment

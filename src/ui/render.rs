@@ -80,6 +80,14 @@ impl<'a> Widget for EditorView<'a> {
             .map(|p| highlight::is_markdown_file(p))
             .unwrap_or(false);
 
+        let is_json = self
+            .app
+            .buffer
+            .file_path
+            .as_ref()
+            .map(|p| highlight::is_json_file(p))
+            .unwrap_or(false);
+
         let md_code_lines = if is_md {
             highlight::compute_code_block_lines(&self.app.buffer)
         } else {
@@ -276,6 +284,12 @@ impl<'a> Widget for EditorView<'a> {
                         if let Some(hs) =
                             highlight::markdown_style_for_line(&line_chars, file_col, md_in_code)
                         {
+                            hs.to_ratatui_style()
+                        } else {
+                            Style::default().fg(theme_fg)
+                        }
+                    } else if is_json {
+                        if let Some(hs) = highlight::json_style_for_line(&line_text, file_col) {
                             hs.to_ratatui_style()
                         } else {
                             Style::default().fg(theme_fg)

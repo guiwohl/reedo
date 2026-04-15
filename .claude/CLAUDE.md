@@ -18,7 +18,7 @@
 | `main.rs` | Entry point, event loop, popup rendering + input routing, mouse handling, SidePanelTree/RecentFilesWidget/MarkdownOutlineWidget, extract_markdown_headings() | — |
 | `app.rs` | Central App state struct, Popup enum (incl. RecentFiles), SidePanelMode (FileTree/MarkdownOutline), autosave, git refresh, external file change detection, flash notifications, recent_files tracking, relative_line_numbers/show_whitespace toggles | — |
 | `editor/` | Core text editing: buffer, cursor, keybinds, undo, brackets, clipboard | [src/editor/CLAUDE.md](src/editor/CLAUDE.md) |
-| `ui/` | All UI widgets: editor view (cursorline, indent guides, relative line numbers, minimap, sticky scroll, whitespace viz), statusbar, tree (guide lines, file sizes, reveal), search, replace, fuzzy (file preview), themes, help, welcome | [src/ui/CLAUDE.md](src/ui/CLAUDE.md) |
+| `ui/` | All UI widgets: editor view (cursorline, indent guides, relative line numbers, minimap, sticky scroll, whitespace viz), statusbar, tree (guide lines, reveal), search, replace, fuzzy (file preview), themes, help, welcome | [src/ui/CLAUDE.md](src/ui/CLAUDE.md) |
 | `syntax/` | Tree-sitter highlighting (17 grammars) + custom markdown/env highlighters | [src/syntax/CLAUDE.md](src/syntax/CLAUDE.md) |
 | `config/` | TOML settings + theme system (9 bundled + custom), cursorline color | [src/config/CLAUDE.md](src/config/CLAUDE.md) |
 | `git/` | Git status, gutter marks (▎ add/modify, ▁ delete), statusbar info via CLI | [src/git/CLAUDE.md](src/git/CLAUDE.md) |
@@ -94,7 +94,6 @@ See `mvp.md` for the original spec. Critical non-obvious decisions:
 - Minimap scrollbar: 1-char right edge showing viewport position + git change markers
 - Sticky scroll: shows current fn/heading at top when scrolled past definition
 - Tree guide lines: ├── └── │ for visual hierarchy
-- File size in tree: right-aligned dim sizes on every file
 - Side panel modes: FileTree (default) and MarkdownOutline (Ctrl+M toggle)
 - Recent files: Ctrl+R popup, last 20 files, session-only
 - Auto-reveal: opening a file auto-expands tree and scrolls to it

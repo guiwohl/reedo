@@ -138,20 +138,15 @@ fn run_tui(cli: Cli, settings: Settings) -> io::Result<()> {
             app.buffer.file_path = Some(path.to_path_buf());
         }
     } else if let Some((path, line, col)) = Settings::load_session() {
-        if app.open_file(&path).is_ok() {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let abs_path = std::fs::canonicalize(&path).unwrap_or(path.clone());
+        let abs_cwd = std::fs::canonicalize(&cwd).unwrap_or(cwd.clone());
+        if abs_path.starts_with(&abs_cwd) && app.open_file(&path).is_ok() {
             let max_line = app.buffer.line_count().saturating_sub(1);
             let safe_line = line.min(max_line);
             let safe_col = col.min(app.buffer.line_len(safe_line));
             app.cursor.move_to(safe_line, safe_col, false);
             app.cursor.update_desired_col();
-            if let Some(parent) = path.parent() {
-                let root = if parent.to_string_lossy().is_empty() {
-                    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-                } else {
-                    parent.to_path_buf()
-                };
-                app.set_project_root(root);
-            }
         }
     }
 
@@ -886,25 +881,6 @@ impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
                     Some((k.as_str(), dim))
                 } else if is_scope_parent {
                     Some(("⌫", dim))
-                } else if let Some(size) = entry.file_size {
-                    // render file size as before, then skip below
-                    let size_str = ui::tree::format_size(size);
-                    let size_x =
-                        inner_x + inner_width as u16 - size_str.len() as u16 - 1;
-                    if size_x > cx {
-                        let mut sx = size_x;
-                        for ch in size_str.chars() {
-                            if (sx - inner_x) as usize >= inner_width {
-                                break;
-                            }
-                            buf.cell_mut((sx, y)).map(|cell| {
-                                cell.set_char(ch);
-                                cell.set_style(Style::default().fg(dim).bg(line_bg));
-                            });
-                            sx += 1;
-                        }
-                    }
-                    None
                 } else {
                     None
                 };
@@ -929,73 +905,112 @@ impl<'a> ratatui::widgets::Widget for SidePanelTree<'a> {
             }
         }
 
-        // hint bar at bottom
+        // bottom bar: action input when active, otherwise hint bar
         if self.focused {
-            let hint_y = area.y + area.height - 1;
-            for lx in inner_x..inner_x + inner_width as u16 {
-                buf.cell_mut((lx, hint_y)).map(|cell| {
-                    cell.set_char(' ');
-                    cell.set_style(Style::default().bg(bg));
-                });
-            }
+            let bar_y = area.y + area.height - 1;
+            let action_bg = selected_bg;
 
-            let is_at_root = self.state.hint_scope.as_ref() == self.state.root.as_ref()
-                || self.state.hint_scope.is_none();
-            let max_n = self.state.hint_indices.len();
-
-            let mut parts: Vec<(&str, String)> = Vec::new();
-            if max_n > 0 {
-                let range = if max_n == 1 {
-                    "1".to_string()
-                } else {
-                    format!("1-{}", max_n)
+            if self.state.action != ui::tree::TreeAction::None {
+                // action input bar (rename, delete, new file/folder)
+                let label = match self.state.action {
+                    ui::tree::TreeAction::NewFile => " new file: ",
+                    ui::tree::TreeAction::NewFolder => " new folder: ",
+                    ui::tree::TreeAction::Rename => " rename: ",
+                    ui::tree::TreeAction::Delete => " delete? (y/n) ",
+                    ui::tree::TreeAction::None => "",
                 };
-                parts.push(("jump", range));
-            }
-            if !is_at_root {
-                parts.push(("back", "⌫".to_string()));
-            }
-            parts.push(("new", "n".to_string()));
-            parts.push(("del", "d".to_string()));
+                let display = format!("{}{}", label, self.state.input_buf);
 
-            let guide_dim = Color::Rgb(50, 50, 60);
-            let key_fg = self.theme.fg();
-            let desc_fg = dim;
-            let mut hx = inner_x + 1;
-            for (i, (desc, key)) in parts.iter().enumerate() {
-                if hx >= inner_x + inner_width as u16 - 1 {
-                    break;
+                for lx in inner_x..inner_x + inner_width as u16 {
+                    buf.cell_mut((lx, bar_y)).map(|cell| {
+                        cell.set_char(' ');
+                        cell.set_style(Style::default().bg(action_bg));
+                    });
                 }
-                for ch in key.chars() {
+
+                let mut cx = inner_x;
+                for (ci, ch) in display.chars().enumerate() {
+                    if (cx - inner_x) as usize >= inner_width {
+                        break;
+                    }
+                    let style = if ci < label.len() {
+                        Style::default().fg(accent).bg(action_bg)
+                    } else {
+                        Style::default().fg(self.theme.fg()).bg(action_bg)
+                    };
+                    buf.cell_mut((cx, bar_y)).map(|cell| {
+                        cell.set_char(ch);
+                        cell.set_style(style);
+                    });
+                    cx += 1;
+                }
+            } else {
+                // hint bar
+                for lx in inner_x..inner_x + inner_width as u16 {
+                    buf.cell_mut((lx, bar_y)).map(|cell| {
+                        cell.set_char(' ');
+                        cell.set_style(Style::default().bg(bg));
+                    });
+                }
+
+                let is_at_root = self.state.hint_scope.as_ref() == self.state.root.as_ref()
+                    || self.state.hint_scope.is_none();
+                let max_n = self.state.hint_indices.len();
+
+                let mut parts: Vec<(&str, String)> = Vec::new();
+                if max_n > 0 {
+                    let range = if max_n == 1 {
+                        "1".to_string()
+                    } else {
+                        format!("1-{}", max_n)
+                    };
+                    parts.push(("jump", range));
+                }
+                if !is_at_root {
+                    parts.push(("back", "⌫".to_string()));
+                }
+                parts.push(("new", "n".to_string()));
+                parts.push(("del", "d".to_string()));
+
+                let guide_dim = Color::Rgb(50, 50, 60);
+                let key_fg = self.theme.fg();
+                let desc_fg = dim;
+                let mut hx = inner_x + 1;
+                for (i, (desc, key)) in parts.iter().enumerate() {
                     if hx >= inner_x + inner_width as u16 - 1 {
                         break;
                     }
-                    buf.cell_mut((hx, hint_y)).map(|cell| {
-                        cell.set_char(ch);
-                        cell.set_style(Style::default().fg(key_fg).bg(bg));
-                    });
-                    hx += 1;
-                }
-                if hx < inner_x + inner_width as u16 - 1 {
-                    hx += 1;
-                }
-                for ch in desc.chars() {
-                    if hx >= inner_x + inner_width as u16 - 1 {
-                        break;
+                    for ch in key.chars() {
+                        if hx >= inner_x + inner_width as u16 - 1 {
+                            break;
+                        }
+                        buf.cell_mut((hx, bar_y)).map(|cell| {
+                            cell.set_char(ch);
+                            cell.set_style(Style::default().fg(key_fg).bg(bg));
+                        });
+                        hx += 1;
                     }
-                    buf.cell_mut((hx, hint_y)).map(|cell| {
-                        cell.set_char(ch);
-                        cell.set_style(Style::default().fg(desc_fg).bg(bg));
-                    });
-                    hx += 1;
-                }
-                if i + 1 < parts.len() && hx + 2 < inner_x + inner_width as u16 - 1 {
-                    hx += 1;
-                    buf.cell_mut((hx, hint_y)).map(|cell| {
-                        cell.set_char('│');
-                        cell.set_style(Style::default().fg(guide_dim).bg(bg));
-                    });
-                    hx += 2;
+                    if hx < inner_x + inner_width as u16 - 1 {
+                        hx += 1;
+                    }
+                    for ch in desc.chars() {
+                        if hx >= inner_x + inner_width as u16 - 1 {
+                            break;
+                        }
+                        buf.cell_mut((hx, bar_y)).map(|cell| {
+                            cell.set_char(ch);
+                            cell.set_style(Style::default().fg(desc_fg).bg(bg));
+                        });
+                        hx += 1;
+                    }
+                    if i + 1 < parts.len() && hx + 2 < inner_x + inner_width as u16 - 1 {
+                        hx += 1;
+                        buf.cell_mut((hx, bar_y)).map(|cell| {
+                            cell.set_char('│');
+                            cell.set_style(Style::default().fg(guide_dim).bg(bg));
+                        });
+                        hx += 2;
+                    }
                 }
             }
         }

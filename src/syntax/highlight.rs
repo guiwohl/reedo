@@ -269,6 +269,102 @@ pub fn is_env_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+pub fn is_json_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e == "json")
+        .unwrap_or(false)
+}
+
+pub fn json_style_for_line(line_text: &str, col: usize) -> Option<HighlightStyle> {
+    let bytes = line_text.as_bytes();
+    let len = bytes.len();
+    if col >= len {
+        return None;
+    }
+
+    let b = bytes[col];
+
+    // structural chars: braces, brackets, commas, colons
+    if b == b'{' || b == b'}' || b == b'[' || b == b']' {
+        return Some(HighlightStyle {
+            fg: Color::Rgb(205, 214, 244),
+            bold: false,
+        });
+    }
+    if b == b':' || b == b',' {
+        return Some(HighlightStyle {
+            fg: Color::Rgb(147, 153, 178),
+            bold: false,
+        });
+    }
+
+    // find if col is inside a string
+    let mut i = 0;
+    let mut in_string = false;
+    let mut string_start = 0;
+    let mut is_key = false;
+    while i < len {
+        if bytes[i] == b'"' && (i == 0 || bytes[i - 1] != b'\\') {
+            if in_string {
+                if col >= string_start && col <= i {
+                    let fg = if is_key {
+                        Color::Rgb(137, 180, 250) // key: blue
+                    } else {
+                        Color::Rgb(166, 227, 161) // value string: green
+                    };
+                    return Some(HighlightStyle { fg, bold: false });
+                }
+                in_string = false;
+            } else {
+                string_start = i;
+                in_string = true;
+                // check if this is a key: look for colon after closing quote
+                is_key = false;
+                let mut j = i + 1;
+                while j < len {
+                    if bytes[j] == b'"' && bytes[j - 1] != b'\\' {
+                        // found end of string, look for colon
+                        let mut k = j + 1;
+                        while k < len && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                            k += 1;
+                        }
+                        if k < len && bytes[k] == b':' {
+                            is_key = true;
+                        }
+                        break;
+                    }
+                    j += 1;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    // numbers
+    if b.is_ascii_digit() || (b == b'-' && col + 1 < len && bytes[col + 1].is_ascii_digit()) {
+        return Some(HighlightStyle {
+            fg: Color::Rgb(250, 179, 135),
+            bold: false,
+        });
+    }
+
+    // true, false, null
+    let rest = &line_text[col..];
+    if rest.starts_with("true") || rest.starts_with("false") || rest.starts_with("null") {
+        let word_len = if rest.starts_with("false") { 5 } else if rest.starts_with("true") { 4 } else { 4 };
+        let end = col + word_len;
+        if end >= len || !bytes[end].is_ascii_alphanumeric() {
+            return Some(HighlightStyle {
+                fg: Color::Rgb(250, 179, 135),
+                bold: true,
+            });
+        }
+    }
+
+    None
+}
+
 pub fn is_markdown_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
